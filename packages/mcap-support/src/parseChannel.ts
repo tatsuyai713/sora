@@ -4,6 +4,7 @@
 
 import protobufjs from "protobufjs";
 import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
+import Cbuf from "wasm-cbuf";
 
 import { MessageDefinition } from "@foxglove/message-definition";
 import { parse as parseMessageDefinition, parseRos2idl } from "@foxglove/rosmsg";
@@ -187,6 +188,29 @@ export function parseChannel(channel: Channel): ParsedChannel {
     return {
       datatypes: parsedDefinitionsToDatatypes(parsedDefinitions, channel.schema.name),
       deserializer: (data) => reader.readMessage(data),
+    };
+  }
+
+  if (channel.messageEncoding === "cbuf") {
+    if (channel.schema?.encoding !== "cbuf") {
+      throw new Error(
+        `Message encoding ${channel.messageEncoding} with ${
+          channel.schema == undefined
+            ? "no encoding"
+            : `schema encoding '${channel.schema.encoding}'`
+        } is not supported (expected cbuf)`,
+      );
+    }
+    const schema = new TextDecoder().decode(channel.schema.data);
+    const res = Cbuf.parseCBufSchema(schema);
+    if (res.error) {
+      throw new Error(`Error parsing cbuf schema: ${res.error}`);
+    }
+    const hashMap = Cbuf.schemaMapToHashMap(res.schema);
+
+    return {
+      datatypes: res.schema,
+      deserializer: (data) => Cbuf.deserializeMessage(hashMap, data, 0).message,
     };
   }
 

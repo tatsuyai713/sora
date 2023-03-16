@@ -38,6 +38,6 @@
     "flatbuffers": "23.1.21",
     "flatbuffers_reflection": "0.0.3",
     "protobufjs": "7.2.2",
-    "wasm-cbuf": "1.0.0"
+    "wasm-cbuf": "2.0.1"
   }
 }

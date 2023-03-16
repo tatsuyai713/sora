@@ -204,13 +204,14 @@ export function parseChannel(channel: Channel): ParsedChannel {
     const schema = new TextDecoder().decode(channel.schema.data);
     const res = Cbuf.parseCBufSchema(schema);
     if (res.error) {
-      throw new Error(`Error parsing cbuf schema: ${res.error}`);
+      throw new Error(`Error parsing cbuf schema: ${res.error}\n\n${schema}`);
     }
-    const hashMap = Cbuf.schemaMapToHashMap(res.schema);
+    const schemaMap = res.schema;
+    const hashMap = Cbuf.schemaMapToHashMap(schemaMap);
 
     return {
       datatypes: res.schema,
-      deserializer: (data) => Cbuf.deserializeMessage(hashMap, data, 0).message,
+      deserializer: (data) => Cbuf.deserializeMessage(schemaMap, hashMap, data, 0).message,
     };
   }
 

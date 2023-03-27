@@ -78,6 +78,15 @@ export const ANNOTATION_DATATYPES = [
   "foxglove.ImageAnnotations",
 ] as const;
 
+export const CAMERA_INFO_DATATYPES = [
+  "sensor_msgs/CameraInfo",
+  "sensor_msgs/msg/CameraInfo",
+  "ros.sensor_msgs.CameraInfo",
+  "foxglove_msgs/CameraCalibration",
+  "foxglove_msgs/msg/CameraCalibration",
+  "foxglove.CameraCalibration",
+] as const;
+
 function addMessages(
   state: ImagePanelState,
   messageEvents: readonly MessageEvent<unknown>[],

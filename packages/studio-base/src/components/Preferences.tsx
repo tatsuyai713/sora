@@ -500,6 +500,18 @@ export default function Preferences(): React.ReactElement {
             <ExperimentalFeatureSettings />
           </Stack>
         </section>
+
+        <section>
+          <Typography component="h2" variant="h5" gutterBottom color="primary">
+            {t("about")}
+          </Typography>
+          <Stack gap={1}>
+            <Typography color="text.secondary">
+              Satellite images &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye,
+              Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community
+            </Typography>
+          </Stack>
+        </section>
       </Stack>
     </SidebarContent>
   );

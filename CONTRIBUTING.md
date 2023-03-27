@@ -1,4 +1,4 @@
-# Contributing to Foxglove Studio
+# Contributing to sviz
 
 **Supported development environments:** Linux, Windows, macOS
 
@@ -16,28 +16,11 @@
 1. Launch the development environment:
 
 ```sh
-# To launch the desktop app (run both scripts concurrently):
-$ yarn desktop:serve        # start webpack
-$ yarn desktop:start        # launch electron
-
 # To launch the browser app:
 $ yarn web:serve
 
-# To launch the browser app using a local instance of the backend server:
-$ yarn web:serve:local
-
 # To launch the storybook:
 $ yarn storybook
-
-# Advanced usage: running webpack and electron on different computers (or VMs) on the same network
-$ yarn desktop:serve --host 192.168.xxx.yyy         # the address where electron can reach the webpack dev server
-$ yarn dlx electron@22.1.0 .webpack # launch the version of electron for the current computer's platform
-
-# To launch the desktop app using production API endpoints
-$ yarn desktop:serve --env FOXGLOVE_BACKEND=production
-$ yarn desktop:start
-
-# NOTE: yarn web:serve does not support connecting to the production endpoints
 ```
 
 ### Other useful commands
@@ -51,7 +34,7 @@ $ yarn test:watch   # run tests on changed files
 
 ## Localization
 
-At this time, first-class support for Foxglove Studio is provided in English only. Localization into other languages is available on a best-effort basis, with translations provided by community volunteers. Current community supported-languages are:
+At this time, first-class support for sviz is provided in English only. Localization into other languages is available on a best-effort basis, with translations provided by community volunteers. Current community supported-languages are:
 
 - Chinese
 
@@ -64,7 +47,7 @@ Translation support is implemented using [`react-i18next`](https://react.i18next
 
 ### Add translations to the `i18n` directory
 
-The [`i18n` directory](packages/studio-base/src/i18n) contains translated (localized) strings for all languages supported by Foxglove Studio.
+The [`i18n` directory](packages/studio-base/src/i18n) contains translated (localized) strings for all languages supported by sviz.
 
 Translated strings are organized into _namespaces_ — e.g. [`i18n/[language]/preferences.ts`](packages/studio-base/src/i18n/en/preferences.ts) contains translations for the app's Preferences tab.
 

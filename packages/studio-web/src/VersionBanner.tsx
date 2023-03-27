@@ -93,7 +93,7 @@ const VersionBanner = function ({
 
           <div>
             <Typography align="center" variant="h6">
-              {prompt} Foxglove Studio currently requires Chrome v{MINIMUM_CHROME_VERSION}+.
+              {prompt} sviz currently requires Chrome v{MINIMUM_CHROME_VERSION}+.
             </Typography>
 
             {!isChrome && (

@@ -1,17 +1,17 @@
 {
   "name": "@foxglove/studio-base",
   "version": "1.45.0-dev",
-  "description": "Core components of Foxglove Studio",
+  "description": "Core components of sviz",
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/foxglove/studio/tree/main/packages/studio-base"
+    "url": "https://github.com/metaverseindustries/sviz/tree/main/packages/studio-base"
   },
   "author": {
-    "name": "Foxglove Technologies",
-    "email": "support@foxglove.dev"
+    "name": "Metaverse Industries LLC",
+    "email": "john@metaverseindustries.llc"
   },
-  "homepage": "https://foxglove.dev/",
+  "homepage": "https://sviz.metaverseindustries.llc/",
   "browser": "assets/index.js",
   "main": "src/index",
   "files": [

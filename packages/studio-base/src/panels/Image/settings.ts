@@ -60,8 +60,8 @@ export function buildSettingsTree({
           label: "Transform markers",
           value: config.transformMarkers,
           help: config.transformMarkers
-            ? "Markers are being transformed by Foxglove Studio based on the camera model. Click to turn it off."
-            : `Markers can be transformed by Foxglove Studio based on the camera model. Click to turn it on.`,
+            ? "Markers are being transformed by sviz based on the camera model. Click to turn it off."
+            : `Markers can be transformed by sviz based on the camera model. Click to turn it on.`,
         },
         synchronize: {
           input: "boolean",

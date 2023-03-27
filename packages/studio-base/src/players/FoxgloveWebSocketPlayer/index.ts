@@ -43,6 +43,7 @@ import {
   ServiceCallRequest,
   ServiceCallResponse,
   Parameter,
+  StatusLevel,
 } from "@foxglove/ws-protocol";
 
 import { JsonMessageWriter } from "./JsonMessageWriter";
@@ -309,7 +310,14 @@ export default class FoxgloveWebSocketPlayer implements Player {
     });
 
     this._client.on("status", (event) => {
-      log.info("Status:", event);
+      const msg = `FoxgloveWebSocket: ${event.message}`;
+      if (event.level === StatusLevel.INFO) {
+        log.info(msg);
+      } else if (event.level === StatusLevel.WARNING) {
+        log.warn(msg);
+      } else {
+        log.error(msg);
+      }
     });
 
     this._client.on("advertise", (newChannels) => {
@@ -446,7 +454,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
         this._parsedMessages.push({
           topic,
           receiveTime,
-          message: chanInfo.parsedChannel.deserializer(data),
+          message: chanInfo.parsedChannel.deserialize(data),
           sizeInBytes: data.byteLength,
           schemaName: chanInfo.channel.schemaName,
         });
@@ -863,7 +871,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
     return await new Promise<Record<string, unknown>>((resolve, reject) => {
       this._serviceResponseCbs.set(serviceCallRequest.callId, (response: ServiceCallResponse) => {
         try {
-          const data = parsedResponse.deserializer(response.data);
+          const data = parsedResponse.deserialize(response.data);
           resolve(data as Record<string, unknown>);
         } catch (error) {
           reject(error);

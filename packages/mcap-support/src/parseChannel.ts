@@ -211,7 +211,7 @@ export function parseChannel(channel: Channel): ParsedChannel {
 
     return {
       datatypes: res.schema,
-      deserializer: (data) => Cbuf.deserializeMessage(schemaMap, hashMap, data, 0).message,
+      deserialize: (data) => Cbuf.deserializeMessage(schemaMap, hashMap, data, 0).message,
     };
   }
 

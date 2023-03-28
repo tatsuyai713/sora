@@ -1,6 +1,6 @@
 {
   "name": "sviz",
-  "version": "1.45.0-dev",
+  "version": "1.46.0-dev",
   "description": "Integrated robotics visualization and debugging.",
   "productName": "sviz",
   "productDescription": "sviz is a highly customizable and extensible visualization and display tool for robotics.",

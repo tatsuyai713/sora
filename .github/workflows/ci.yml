@@ -180,7 +180,7 @@ jobs:
         run: yarn install --immutable
 
       - name: Build
-        command: yarn run web:build:prod
+        run: yarn run web:build:prod
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1-node16

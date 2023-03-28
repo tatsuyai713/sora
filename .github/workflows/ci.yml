@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, release/*]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -47,17 +47,17 @@ jobs:
     name: ${{ matrix.config.name }} (${{ matrix.os }})
 
     steps:
-      - uses: actions/checkout@v3.4.0
+      - uses: actions/checkout@v3
         with:
           lfs: true
 
-      - uses: actions/setup-node@v3.6.0
+      - uses: actions/setup-node@v3
         with:
           node-version: 16.17
       - run: corepack enable yarn
 
       - name: Restore cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v3
         with:
           path: |
             .yarn/cache
@@ -74,18 +74,18 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
-      - uses: actions/checkout@v3.4.0
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0 # Required for Chromatic
           lfs: true
 
-      - uses: actions/setup-node@v3.6.0
+      - uses: actions/setup-node@v3
         with:
           node-version: 16.17
       - run: corepack enable yarn
 
       - name: Restore cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v3
         with:
           path: |
             .yarn/cache
@@ -118,17 +118,17 @@ jobs:
     name: integration (${{ matrix.os }})
 
     steps:
-      - uses: actions/checkout@v3.4.0
+      - uses: actions/checkout@v3
         with:
           lfs: true
 
-      - uses: actions/setup-node@v3.6.0
+      - uses: actions/setup-node@v3
         with:
           node-version: 16.17
       - run: corepack enable yarn
 
       - name: Restore cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v3
         with:
           path: |
             .yarn/cache
@@ -140,7 +140,7 @@ jobs:
 
       - name: test:integration
         if: matrix.os == 'ubuntu-20.04'
-        uses: GabrielBB/xvfb-action@v1.6
+        uses: GabrielBB/xvfb-action@v1
         with:
           working-directory: ./
           run: yarn run test:integration
@@ -152,3 +152,44 @@ jobs:
       - name: test:integration
         if: matrix.os != 'ubuntu-20.04'
         run: yarn run test:integration
+
+  release:
+    runs-on: ubuntu-20.04
+    needs: [test, storybook, integration]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.17
+      - run: corepack enable yarn
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .yarn/cache
+            **/node_modules
+          key: v5-${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: v5-${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        command: yarn run web:build:prod
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Publish to S3
+        run: |
+          aws s3 sync web/.webpack s3://${{ S3_BUCKET }} --delete
+          aws cloudfront create-invalidation --distribution-id ${{ CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"

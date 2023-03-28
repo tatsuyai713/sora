@@ -191,7 +191,7 @@ jobs:
 
       - name: Publish to S3
         env:
-          S3_BUCKET: ${{ vars.S3_BUCKET } }}}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
           CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
           aws s3 sync web/.webpack s3://$S3_BUCKET --delete

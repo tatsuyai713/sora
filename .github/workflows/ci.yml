@@ -191,8 +191,8 @@ jobs:
 
       - name: Publish to S3
         env:
-          S3_BUCKET: ${{ variables.S3_BUCKET } }}}
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ variables.CLOUDFRONT_DISTRIBUTION_ID }}
+          S3_BUCKET: ${{ vars.S3_BUCKET } }}}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
           aws s3 sync web/.webpack s3://$S3_BUCKET --delete
           aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*"

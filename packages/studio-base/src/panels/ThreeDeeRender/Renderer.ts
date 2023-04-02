@@ -46,10 +46,12 @@ import {
   normalizeTFMessage,
   normalizeTransformStamped,
 } from "./normalizeMessages";
+import { CameraStateSettings } from "./renderables/CameraStateSettings";
 import { Cameras } from "./renderables/Cameras";
-import { CoreSettings } from "./renderables/CoreSettings";
 import { FrameAxes, LayerSettingsTransform } from "./renderables/FrameAxes";
+import { FrameSettings } from "./renderables/FrameSettings";
 import { Grids } from "./renderables/Grids";
+import { ImageMode } from "./renderables/ImageMode";
 import { Images } from "./renderables/Images";
 import { LaserScans } from "./renderables/LaserScans";
 import { Markers } from "./renderables/Markers";
@@ -60,7 +62,9 @@ import { Polygons } from "./renderables/Polygons";
 import { PoseArrays } from "./renderables/PoseArrays";
 import { Poses } from "./renderables/Poses";
 import { PublishClickTool, PublishClickType } from "./renderables/PublishClickTool";
+import { PublishSettings } from "./renderables/PublishSettings";
 import { FoxgloveSceneEntities } from "./renderables/SceneEntities";
+import { SceneSettings } from "./renderables/SceneSettings";
 import { Urdfs } from "./renderables/Urdfs";
 import { VelodyneScans } from "./renderables/VelodyneScans";
 import { MarkerPool } from "./renderables/markers/MarkerPool";
@@ -76,6 +80,7 @@ import {
 } from "./ros";
 import { BaseSettings, CustomLayerSettings, SelectEntry } from "./settings";
 import { AddTransformResult, makePose, Pose, Transform, TransformTree } from "./transforms";
+import { InterfaceMode } from "./types";
 
 const log = Logger.getLogger(__filename);
 
@@ -105,6 +110,32 @@ export type RendererEvents = {
 };
 
 export type FollowMode = "follow-pose" | "follow-position" | "follow-none";
+
+/** Legacy Image panel settings that occur at the root level */
+export type LegacyImageConfig = {
+  cameraTopic: string;
+  enabledMarkerTopics: string[];
+  synchronize: boolean;
+  flipHorizontal: boolean;
+  flipVertical: boolean;
+  maxValue: number;
+  minValue: number;
+  mode: "fit" | "fill" | "other";
+  pan: { x: number; y: number };
+  rotation: number;
+  smooth: boolean;
+  transformMarkers: boolean;
+  zoom: number;
+  zoomPercentage: number;
+};
+
+/** Settings pertaining to Image mode */
+export type ImageModeConfig = {
+  /** Image topic to display */
+  imageTopic?: string;
+  /** Topic containing CameraCalibration or CameraInfo */
+  calibrationTopic?: string;
+};
 
 export type RendererConfig = {
   /** Camera settings for the currently rendering scene */
@@ -166,6 +197,9 @@ export type RendererConfig = {
   topics: Record<string, Partial<BaseSettings> | undefined>;
   /** instanceId -> settings */
   layers: Record<string, Partial<CustomLayerSettings> | undefined>;
+
+  /** Settings pertaining to Image mode */
+  imageMode: ImageModeConfig;
 };
 
 /** Callback for handling a message received on a topic */
@@ -265,6 +299,7 @@ class InstancedLineMaterial extends THREE.LineBasicMaterial {
  * `WebGLRenderingContext`, and `SettingsTree`.
  */
 export class Renderer extends EventEmitter<RendererEvents> {
+  public readonly interfaceMode: InterfaceMode;
   private canvas: HTMLCanvasElement;
   public readonly gl: THREE.WebGLRenderer;
   public maxLod = DetailLevel.High;
@@ -293,7 +328,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
   public readonly outlineMaterial = new THREE.LineBasicMaterial({ dithering: true });
   public readonly instancedOutlineMaterial = new InstancedLineMaterial({ dithering: true });
 
-  private coreSettings: CoreSettings;
+  private cameraStateSettings: CameraStateSettings;
   public measurementTool: MeasurementTool;
   public publishClickTool: PublishClickTool;
 
@@ -307,7 +342,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
   private controls: OrbitControls;
   public followMode: FollowMode;
   // The pose of the render frame in the fixed frame when following was disabled
-  private unfollowPoseSnapshot: Pose | undefined;
+  public unfollowPoseSnapshot: Pose | undefined;
 
   // Are we connected to a ROS data source? Normalize coordinate frames if so by
   // stripping any leading "/" prefix. See `normalizeFrameId()` for details.
@@ -336,15 +371,20 @@ export class Renderer extends EventEmitter<RendererEvents> {
   private _cameraSyncError: undefined | string;
   private _devicePixelRatioMediaQuery?: MediaQueryList;
 
-  public constructor(canvas: HTMLCanvasElement, config: RendererConfig) {
+  public constructor(
+    canvas: HTMLCanvasElement,
+    config: Immutable<RendererConfig>,
+    interfaceMode: InterfaceMode,
+  ) {
     super();
     // NOTE: Global side effect
     THREE.Object3D.DEFAULT_UP = new THREE.Vector3(0, 0, 1);
 
+    this.interfaceMode = interfaceMode;
     this.canvas = canvas;
     this.config = config;
 
-    this.settings = new SettingsManager(baseSettingsTree());
+    this.settings = new SettingsManager(baseSettingsTree(this.interfaceMode));
     this.settings.on("update", () => this.emit("settingsTreeChange", this));
     // Add the top-level nodes first so merging happens in the correct order.
     // Another approach would be to modify SettingsManager to allow merging parent
@@ -447,7 +487,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
 
     this.measurementTool = new MeasurementTool(this);
     this.publishClickTool = new PublishClickTool(this);
-    this.coreSettings = new CoreSettings(this);
+    this.cameraStateSettings = new CameraStateSettings(this);
 
     // Internal handlers for TF messages to update the transform tree
     this.addSchemaSubscriptions(FRAME_TRANSFORM_DATATYPES, {
@@ -471,7 +511,18 @@ export class Renderer extends EventEmitter<RendererEvents> {
       preload: config.scene.transforms?.enablePreloading ?? true,
     });
 
-    this.addSceneExtension(this.coreSettings);
+    switch (interfaceMode) {
+      case "image":
+        this.addSceneExtension(new ImageMode(this));
+        break;
+      case "3d":
+        this.addSceneExtension(this.cameraStateSettings);
+        this.addSceneExtension(new PublishSettings(this));
+        this.addSceneExtension(new FrameSettings(this));
+        break;
+    }
+
+    this.addSceneExtension(new SceneSettings(this));
     this.addSceneExtension(new Cameras(this));
     this.addSceneExtension(new FrameAxes(this));
     this.addSceneExtension(new Grids(this));
@@ -541,7 +592,8 @@ export class Renderer extends EventEmitter<RendererEvents> {
 
   public setCameraSyncError(error: undefined | string): void {
     this._cameraSyncError = error;
-    this.updateCoreSettings();
+    // Updates the settings tree for camera state settings to account for any changes in the config.
+    this.cameraStateSettings.updateSettingsTree();
   }
 
   public getPixelRatio(): number {
@@ -689,11 +741,6 @@ export class Renderer extends EventEmitter<RendererEvents> {
   public updateConfig(updateHandler: (draft: RendererConfig) => void): void {
     this.config = produce(this.config, updateHandler);
     this.emit("configChange", this);
-  }
-
-  /** Updates the settings tree for core settings to account for any changes in the config. */
-  public updateCoreSettings(): void {
-    this.coreSettings.updateSettingsTree();
   }
 
   public addSchemaSubscriptions<T>(
@@ -1468,6 +1515,9 @@ export class Renderer extends EventEmitter<RendererEvents> {
       } else {
         log.debug(`Changing fixed frame from "${this.fixedFrameId}" to "${fixedFrameId}"`);
       }
+      // Set the unfollowPoseSnapshot to undefined because there is a new fixed frame for the snapshot
+      // This keeps the camera settings offsets based off of the display frame rather than old fixed frame.
+      this.unfollowPoseSnapshot = undefined;
       this.fixedFrameId = fixedFrameId;
     }
 
@@ -1569,14 +1619,19 @@ function deselectObject(object: THREE.Object3D) {
   });
 }
 
-// Creates a skeleton settings tree. The tree contents are filled in by scene extensions
-function baseSettingsTree(): SettingsTreeNodes {
-  return {
-    general: {},
-    scene: {},
-    transforms: {},
-    topics: {},
-    layers: {},
-    publish: {},
-  };
+/**
+ * Creates a skeleton settings tree. The tree contents are filled in by scene extensions.
+ * This dictates the order in which groups appear in the settings editor.
+ */
+function baseSettingsTree(interfaceMode: InterfaceMode): SettingsTreeNodes {
+  const keys: string[] = [];
+  keys.push(interfaceMode === "image" ? "imageMode" : "general", "scene");
+  if (interfaceMode === "3d") {
+    keys.push("cameraState");
+  }
+  keys.push("transforms", "topics", "layers");
+  if (interfaceMode === "3d") {
+    keys.push("publish");
+  }
+  return Object.fromEntries(keys.map((key) => [key, {}]));
 }

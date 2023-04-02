@@ -14,6 +14,7 @@ import { Link, Typography } from "@mui/material";
 import { useSnackbar } from "notistack";
 import { extname } from "path";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { makeStyles } from "tss-react/mui";
 
 import Logger from "@foxglove/log";
@@ -39,7 +40,6 @@ import PanelLayout from "@foxglove/studio-base/components/PanelLayout";
 import PanelList from "@foxglove/studio-base/components/PanelList";
 import PanelSettings from "@foxglove/studio-base/components/PanelSettings";
 import PlaybackControls from "@foxglove/studio-base/components/PlaybackControls";
-import Preferences from "@foxglove/studio-base/components/Preferences";
 import RemountOnValueChange from "@foxglove/studio-base/components/RemountOnValueChange";
 import { SidebarContent } from "@foxglove/studio-base/components/SidebarContent";
 import Sidebars, { SidebarItem } from "@foxglove/studio-base/components/Sidebars";
@@ -52,6 +52,7 @@ import {
 } from "@foxglove/studio-base/components/StudioLogsSettings";
 import { SyncAdapters } from "@foxglove/studio-base/components/SyncAdapters";
 import VariablesList from "@foxglove/studio-base/components/VariablesList";
+import { WorkspaceDialogs } from "@foxglove/studio-base/components/WorkspaceDialogs";
 import {
   LayoutState,
   useCurrentLayoutSelector,
@@ -120,12 +121,19 @@ function AddPanel() {
   const addPanel = useAddPanel();
   const { openLayoutBrowser } = useWorkspaceActions();
   const selectedLayoutId = useCurrentLayoutSelector(selectedLayoutIdSelector);
+  const { t } = useTranslation("addPanel");
 
   return (
-    <SidebarContent disablePadding={selectedLayoutId != undefined} title="Add panel">
+    <SidebarContent disablePadding={selectedLayoutId != undefined} title={t("addPanel")}>
       {selectedLayoutId == undefined ? (
         <Typography color="text.secondary">
-          <Link onClick={openLayoutBrowser}>Select a layout</Link> to get started!
+          <Trans
+            t={t}
+            i18nKey="noLayoutSelected"
+            components={{
+              selectLayoutLink: <Link onClick={openLayoutBrowser} />,
+            }}
+          />
         </Typography>
       ) : (
         <PanelList onPanelSelect={addPanel} />
@@ -184,6 +192,7 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
   const rightSidebarSize = useWorkspaceStore(selectWorkspaceRightSidebarSize);
 
   const {
+    prefsDialogActions,
     setLeftSidebarOpen,
     setRightSidebarOpen,
     selectLeftSidebarItem,
@@ -192,8 +201,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
     setRightSidebarSize,
     selectSidebarItem,
   } = useWorkspaceActions();
-
-  const [prefsDialogOpen, setPrefsDialogOpen] = useState(false);
 
   // file types we support for drag/drop
   const allowedDropExtensions = useMemo(() => {
@@ -304,12 +311,8 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
   useNativeAppMenuEvent(
     "open-preferences",
     useCallback(() => {
-      if (enableNewTopNav) {
-        setPrefsDialogOpen(true);
-      } else {
-        selectSidebarItem("preferences");
-      }
-    }, [enableNewTopNav, selectSidebarItem]),
+      prefsDialogActions.open();
+    }, [prefsDialogActions]),
   );
 
   useNativeAppMenuEvent(
@@ -479,11 +482,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
     };
   }, []);
 
-  const ConnectedLayoutBrowser = useCallback(
-    () => <LayoutBrowser supportsSignIn={supportsAccountSettings} />,
-    [supportsAccountSettings],
-  );
-
   const [sidebarItems, sidebarBottomItems] = useMemo(() => {
     const topItems = new Map<SidebarItemKey, SidebarItem>([
       [
@@ -504,7 +502,7 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
       topItems.set("layouts", {
         iconName: "FiveTileGrid",
         title: "Layouts",
-        component: ConnectedLayoutBrowser,
+        component: LayoutBrowser,
       });
       topItems.set("add-panel", {
         iconName: "RectangularClipping",
@@ -551,7 +549,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
       bottomItems.set("preferences", {
         iconName: "Settings",
         title: "Preferences",
-        component: Preferences,
       });
     }
 
@@ -559,7 +556,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
   }, [
     DataSourceSidebarItem,
     playerProblems,
-    ConnectedLayoutBrowser,
     enableStudioLogsSidebar,
     enableNewTopNav,
     supportsAccountSettings,
@@ -571,24 +567,24 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
 
   const leftSidebarItems = useMemo(() => {
     const items = new Map<LeftSidebarItemKey, NewSidebarItem>([
+      ["panel-settings", { title: "Panel", component: PanelSettingsSidebar }],
       ["topics", { title: "Topics", component: TopicList }],
+    ]);
+    return items;
+  }, [PanelSettingsSidebar]);
+
+  const rightSidebarItems = useMemo(() => {
+    const items = new Map<RightSidebarItemKey, NewSidebarItem>([
       ["variables", { title: "Variables", component: VariablesList }],
     ]);
     if (enableStudioLogsSidebar) {
       items.set("studio-logs-settings", { title: "Studio Logs", component: StudioLogsSettings });
     }
-    return items;
-  }, [enableStudioLogsSidebar]);
-
-  const rightSidebarItems = useMemo(() => {
-    const items = new Map<RightSidebarItemKey, NewSidebarItem>([
-      ["panel-settings", { title: "Panel settings", component: PanelSettingsSidebar }],
-    ]);
     if (showEventsTab) {
       items.set("events", { title: "Events", component: EventsList });
     }
     return items;
-  }, [PanelSettingsSidebar, showEventsTab]);
+  }, [enableStudioLogsSidebar, showEventsTab]);
 
   const keyDownHandlers = useMemo(() => {
     return {
@@ -638,8 +634,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
       <div className={classes.container} ref={containerRef} tabIndex={0}>
         {enableNewTopNav && (
           <AppBar
-            currentUser={currentUser}
-            signIn={signIn}
             leftInset={props.appBarLeftInset}
             onDoubleClick={props.onAppBarDoubleClick}
             showCustomWindowControls={props.showCustomWindowControls}
@@ -649,8 +643,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
             onUnmaximizeWindow={props.onUnmaximizeWindow}
             onCloseWindow={props.onCloseWindow}
             onSelectDataSourceAction={() => setShowOpenDialog({ view: "start" })}
-            prefsDialogOpen={prefsDialogOpen}
-            setPrefsDialogOpen={setPrefsDialogOpen}
           />
         )}
         <Sidebars
@@ -689,6 +681,7 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
           </div>
         )}
       </div>
+      <WorkspaceDialogs />
     </MultiProvider>
   );
 }

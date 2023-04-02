@@ -167,6 +167,7 @@ export const aboutItems: Map<
       links: [
         { title: "License terms", url: "https://foxglove.dev/legal/studio-license" },
         { title: "Privacy policy", url: "https://foxglove.dev/legal/privacy" },
+        { title: "Satellite imagery", url: "https://www.esri.com/" },
       ],
     },
   ],

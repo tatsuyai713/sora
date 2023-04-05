@@ -328,7 +328,7 @@ function SidebarItems(props: { onSelectView: (newValue: OpenDialogViews) => void
       case "authenticated-enterprise":
         return teamOrEnterpriseUser;
     }
-  }, [analytics, classes.button, currentUserType, freeUser, teamOrEnterpriseUser]);
+  }, [analytics, classes.button, currentUserType, freeUser, t, teamOrEnterpriseUser]);
 
   return (
     <>

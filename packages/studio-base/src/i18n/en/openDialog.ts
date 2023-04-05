@@ -4,7 +4,7 @@
 
 export const openDialog = {
   // Start
-  newToFoxgloveStudio: "New to Foxglove Studio?",
+  newToFoxgloveStudio: "New to sviz?",
   newToFoxgloveStudioDescription:
     "Start by exploring a sample dataset or checking out our documentation.",
   exploreSampleData: "Explore sample data",

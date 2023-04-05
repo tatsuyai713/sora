@@ -266,7 +266,7 @@ export function PreferencesDialog(
               <LanguageSettings />
               {supportsAppUpdates && <AutoUpdate />}
               {!isDesktopApp() && <LaunchDefault />}
-              <RosPackagePath />
+              {isDesktopApp() && <RosPackagePath />}
             </Stack>
           </section>
 

@@ -9,9 +9,9 @@ RUN yarn install --immutable
 RUN yarn run web:build:prod
 
 # Release stage
-FROM caddy:2.5.2-alpine
+FROM caddy:2.6.4-alpine
 WORKDIR /src
 COPY --from=build /src/web/.webpack ./
 
-EXPOSE 8080
-CMD ["caddy", "file-server", "--listen", ":8080"]
+EXPOSE 80
+CMD ["caddy", "file-server", "--listen", ":80"]

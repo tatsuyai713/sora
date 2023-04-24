@@ -20,13 +20,11 @@ sviz is an integrated visualization and diagnosis tool for robotics, available [
 
 Use the live deployment at [sviz.metaverseindustries.llc](https://sviz.metaverseindustries.llc/) or build the project from source and deploy the contents of `web/.webpack` to a web server.
 
-## Contributing
+## Open Source
 
 sviz is primarily written in TypeScript – contributions are welcome!
 
-Note: All contributors must agree to our [Contributor License Agreement](https://github.com/foxglove/cla).
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+The official binary distributions available at [studio.foxglove.dev](https://studio.foxglove.dev/) or [foxglove.dev/download](https://foxglove.dev/download) incorporate some closed-source functionality, such as integration with [Foxglove Data Platform](https://foxglove.dev/data-platform), multiple layouts, private extensions, and more. For more information on free and paid features, see our [Pricing](https://foxglove.dev/pricing).
 
 ## Credits
 

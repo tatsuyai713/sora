@@ -25,11 +25,12 @@ import Logger from "@foxglove/log";
 import { toNanoSec } from "@foxglove/rostime";
 import { CameraCalibration, CompressedImage, RawImage } from "@foxglove/schemas";
 import { SettingsTreeAction, SettingsTreeFields, Topic } from "@foxglove/studio";
+import { AnyImage } from "@foxglove/studio-base/panels/ThreeDeeRender/renderables/ImageTypes";
 import type { RosValue } from "@foxglove/studio-base/players/types";
 
 import { cameraInfosEqual, normalizeCameraInfo, projectPixel } from "./projections";
+import type { IRenderer } from "../IRenderer";
 import { BaseUserData, Renderable } from "../Renderable";
-import type { Renderer } from "../Renderer";
 import { PartialMessage, PartialMessageEvent, SceneExtension } from "../SceneExtension";
 import { SettingsTreeEntry } from "../SettingsManager";
 import { stringToRgba } from "../color";
@@ -53,8 +54,6 @@ import { makePose } from "../transforms";
 
 const log = Logger.getLogger(__filename);
 void log;
-
-type AnyImage = RosImage | RosCompressedImage | RawImage | CompressedImage;
 
 export type LayerSettingsImage = BaseSettings & {
   cameraInfoTopic: string | undefined;
@@ -125,7 +124,7 @@ export class Images extends SceneExtension<ImageRenderable> {
 
   private lastTopics: readonly Topic[] | undefined = undefined;
 
-  public constructor(renderer: Renderer) {
+  public constructor(renderer: IRenderer) {
     super("foxglove.Images", renderer);
 
     renderer.addSchemaSubscriptions(ROS_IMAGE_DATATYPES, this.handleRosRawImage);
@@ -646,7 +645,7 @@ type RawImageOptions = {
 
 const tempColor = { r: 0, g: 0, b: 0, a: 0 };
 
-function tryCreateMesh(renderable: ImageRenderable, renderer: Renderer): void {
+function tryCreateMesh(renderable: ImageRenderable, renderer: IRenderer): void {
   const { mesh, geometry, material } = renderable.userData;
   if (!mesh && geometry && material) {
     renderable.userData.mesh = new THREE.Mesh(geometry, renderable.userData.material);

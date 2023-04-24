@@ -158,8 +158,9 @@ export default function PlaybackControls(props: {
   );
 
   const toggleCreateEventDialog = useCallback(() => {
+    pause();
     setCreateEventDialogOpen((open) => !open);
-  }, []);
+  }, [pause]);
 
   const disableControls = presence === PlayerPresence.ERROR;
 
@@ -193,7 +194,6 @@ export default function PlaybackControls(props: {
                   disabled={presence !== PlayerPresence.PRESENT}
                   size="small"
                   icon={<Info24Regular />}
-                  activeColor="info"
                 />
               </Tooltip>
             )}

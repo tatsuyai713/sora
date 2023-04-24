@@ -8,19 +8,15 @@ import { useTranslation } from "react-i18next";
 import tinycolor from "tinycolor2";
 import { makeStyles } from "tss-react/mui";
 
+import { DataSourceDialogItem } from "@foxglove/studio-base/components/DataSourceDialog/DataSourceDialog";
 import FoxgloveLogoText from "@foxglove/studio-base/components/FoxgloveLogoText";
 import Stack from "@foxglove/studio-base/components/Stack";
 import TextMiddleTruncate from "@foxglove/studio-base/components/TextMiddleTruncate";
 import { useAnalytics } from "@foxglove/studio-base/context/AnalyticsContext";
 import { useCurrentUserType } from "@foxglove/studio-base/context/CurrentUserContext";
 import { usePlayerSelection } from "@foxglove/studio-base/context/PlayerSelectionContext";
+import { useWorkspaceActions } from "@foxglove/studio-base/context/WorkspaceContext";
 import { AppEvent } from "@foxglove/studio-base/services/IAnalytics";
-
-import { OpenDialogViews } from "./types";
-
-export type IStartProps = {
-  onSelectView: (newValue: OpenDialogViews) => void;
-};
 
 const useStyles = makeStyles()((theme) => ({
   logo: {
@@ -161,7 +157,9 @@ type SidebarItem = {
   actions?: ReactNode;
 };
 
-function SidebarItems(props: { onSelectView: (newValue: OpenDialogViews) => void }): JSX.Element {
+function SidebarItems(props: {
+  onSelectView: (newValue: DataSourceDialogItem) => void;
+}): JSX.Element {
   const { onSelectView } = props;
   const currentUserType = useCurrentUserType();
   const analytics = useAnalytics();
@@ -351,12 +349,12 @@ function SidebarItems(props: { onSelectView: (newValue: OpenDialogViews) => void
   );
 }
 
-export default function Start(props: IStartProps): JSX.Element {
-  const { onSelectView } = props;
+export default function Start(): JSX.Element {
   const { recentSources, selectRecent } = usePlayerSelection();
   const { classes } = useStyles();
   const analytics = useAnalytics();
   const { t } = useTranslation("openDialog");
+  const { dataSourceDialogActions } = useWorkspaceActions();
 
   const startItems = useMemo(() => {
     return [
@@ -370,7 +368,7 @@ export default function Start(props: IStartProps): JSX.Element {
           </SvgIcon>
         ),
         onClick: () => {
-          onSelectView("file");
+          dataSourceDialogActions.open("file");
           void analytics.logEvent(AppEvent.DIALOG_SELECT_VIEW, { type: "local" });
         },
       },
@@ -384,12 +382,12 @@ export default function Start(props: IStartProps): JSX.Element {
           </SvgIcon>
         ),
         onClick: () => {
-          onSelectView("connection");
+          dataSourceDialogActions.open("connection");
           void analytics.logEvent(AppEvent.DIALOG_SELECT_VIEW, { type: "live" });
         },
       },
     ];
-  }, [analytics, onSelectView, t]);
+  }, [analytics, dataSourceDialogActions, t]);
 
   return (
     <Stack className={classes.grid}>
@@ -441,7 +439,7 @@ export default function Start(props: IStartProps): JSX.Element {
       </Stack>
       <div className={classes.spacer} />
       <Stack gap={4} className={classes.sidebar}>
-        <SidebarItems onSelectView={onSelectView} />
+        <SidebarItems onSelectView={dataSourceDialogActions.open} />
       </Stack>
     </Stack>
   );

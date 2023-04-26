@@ -110,22 +110,11 @@ export type LegacyImageConfig = {
   zoomPercentage: number;
 };
 
-/** Settings pertaining to Image mode */
-export type ImageModeConfig = {
-  /** Image topic to display */
-  imageTopic?: string;
-  /** Topic containing CameraCalibration or CameraInfo */
-  calibrationTopic?: string;
-};
-
 /** Menu item entry and callback for the "Custom Layers" menu */
 export type CustomLayerAction = {
   action: SettingsTreeNodeActionItem;
   handler: (instanceId: string) => void;
 };
-
-// Enable this to render the hitmap to the screen after clicking
-const DEBUG_PICKING: boolean = false;
 
 // Maximum number of objects to present as selection options in a single click
 const MAX_SELECTIONS = 10;
@@ -183,6 +172,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
   private canvas: HTMLCanvasElement;
   public readonly gl: THREE.WebGLRenderer;
   public maxLod = DetailLevel.High;
+  public debugPicking = false;
   public config: Immutable<RendererConfig>;
   public settings: SettingsManager;
   // [{ name, datatype }]
@@ -315,7 +305,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.input.on("resize", (size) => this.resizeHandler(size));
     this.input.on("click", (cursorCoords) => this.clickHandler(cursorCoords));
 
-    this.picker = new Picker(this.gl, this.scene, { debug: DEBUG_PICKING });
+    this.picker = new Picker(this.gl, this.scene);
 
     this.selectionBackdrop = new ScreenOverlay(this);
     this.selectionBackdrop.visible = false;
@@ -355,7 +345,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     const aspect = renderSize.width / renderSize.height;
     switch (interfaceMode) {
       case "image":
-        this.cameraHandler = new ImageMode(this, aspect);
+        this.cameraHandler = new ImageMode(this, this.input.canvasSize);
         this.addSceneExtension(this.cameraHandler);
         break;
       case "3d":
@@ -811,7 +801,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
 
     this.emit("selectedRenderable", selection, this);
 
-    if (!DEBUG_PICKING) {
+    if (!this.debugPicking) {
       this.animationFrame();
     }
   }
@@ -1000,11 +990,9 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
   private resizeHandler = (size: THREE.Vector2): void => {
     this.gl.setPixelRatio(window.devicePixelRatio);
     this.gl.setSize(size.width, size.height);
+    this.cameraHandler.handleResize(size.width, size.height, window.devicePixelRatio);
 
-    // renderSize points to `tempVec2` so we don't want to pass it anywhere that might store it
     const renderSize = this.gl.getDrawingBufferSize(tempVec2);
-    this.cameraHandler.handleResize(renderSize.width, renderSize.height);
-
     log.debug(`Resized renderer to ${renderSize.width}x${renderSize.height}`);
     this.animationFrame();
   };
@@ -1042,7 +1030,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     for (const selection of selections) {
       selection.renderable.visible = true;
     }
-    if (!DEBUG_PICKING) {
+    if (!this.debugPicking) {
       this.animationFrame();
     }
 
@@ -1148,6 +1136,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
       cursorCoords.x,
       cursorCoords.y,
       this.cameraHandler.getActiveCamera(),
+      { debug: this.debugPicking },
     );
     if (objectId === -1) {
       return undefined;
@@ -1180,6 +1169,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
         cursorCoords.y,
         this.cameraHandler.getActiveCamera(),
         renderable,
+        { debug: this.debugPicking },
       );
       instanceIndex = instanceIndex === -1 ? undefined : instanceIndex;
     }
@@ -1318,6 +1308,9 @@ function deselectObject(object: THREE.Object3D) {
 function baseSettingsTree(interfaceMode: InterfaceMode): SettingsTreeNodes {
   const keys: string[] = [];
   keys.push(interfaceMode === "image" ? "imageMode" : "general", "scene");
+  if (interfaceMode === "image") {
+    keys.push("imageAnnotations");
+  }
   if (interfaceMode === "3d") {
     keys.push("cameraState");
   }

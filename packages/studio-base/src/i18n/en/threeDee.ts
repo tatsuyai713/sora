@@ -34,6 +34,7 @@ export const threeDee = {
   // Scene
   scene: "Scene",
   renderStats: "Render stats",
+  debugPicking: "Debug picking",
   background: "Background",
   labelScale: "Label scale",
   labelScaleHelp: "Scale factor to apply to all labels",
@@ -71,4 +72,7 @@ export const threeDee = {
   grid: "Grid",
   delete: "Delete",
   addGrid: "Add Grid",
+
+  // Image annotations
+  imageAnnotations: "Image annotations",
 };

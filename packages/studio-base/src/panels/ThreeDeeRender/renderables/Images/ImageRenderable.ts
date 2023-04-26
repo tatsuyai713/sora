@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { assert } from "ts-essentials";
 
 import {
+  BROWSER_IMAGE_FORMATS,
   PinholeCameraModel,
   decodeBGR8,
   decodeBGRA8,
@@ -21,6 +22,8 @@ import {
   decodeYUV,
   decodeYUYV,
 } from "@foxglove/den/image";
+import { VideoPlayer } from "@foxglove/den/video";
+import Logger from "@foxglove/log";
 import { toNanoSec } from "@foxglove/rostime";
 import { RawImage } from "@foxglove/schemas";
 import { BaseUserData, Renderable } from "@foxglove/studio-base/panels/ThreeDeeRender/Renderable";
@@ -30,6 +33,8 @@ import { RosValue } from "@foxglove/studio-base/players/types";
 
 import { AnyImage } from "./ImageTypes";
 import { Image as RosImage, CameraInfo } from "../../ros";
+
+const log = Logger.getLogger(__filename);
 
 export interface ImageRenderableSettings {
   visible: boolean;
@@ -53,6 +58,7 @@ export const IMAGE_RENDERABLE_DEFAULT_SETTINGS: ImageRenderableSettings = {
 export type ImageUserData = BaseUserData & {
   topic: string;
   settings: ImageRenderableSettings;
+  firstMessageTime: bigint | undefined;
   cameraInfo: CameraInfo | undefined;
   cameraModel: PinholeCameraModel | undefined;
   image: AnyImage | undefined;
@@ -63,6 +69,7 @@ export type ImageUserData = BaseUserData & {
 };
 
 const CREATE_BITMAP_ERR = "CreateBitmap";
+const VIDEO_PLAYER_ERR = "VideoPlayer";
 const DEFAULT_IMAGE_WIDTH = 512;
 
 export class ImageRenderable extends Renderable<ImageUserData> {
@@ -75,8 +82,15 @@ export class ImageRenderable extends Renderable<ImageUserData> {
   #textureNeedsUpdate = true;
   // set when material or texture changes
   #materialNeedsUpdate = true;
+  // A lazily instantiated player for compressed video
+  #videoPlayer: VideoPlayer | undefined;
 
   public override dispose(): void {
+    if (this.#videoPlayer) {
+      this.#videoPlayer.close();
+      this.#videoPlayer.removeAllListeners();
+      this.#videoPlayer = undefined;
+    }
     this.userData.texture?.dispose();
     this.userData.material?.dispose();
     this.userData.geometry?.dispose();
@@ -179,26 +193,87 @@ export class ImageRenderable extends Renderable<ImageUserData> {
     const image = this.userData.image;
     // Create or update the bitmap texture
     if ("format" in image) {
-      const bitmapData = new Blob([image.data], { type: `image/${image.format}` });
-      self
-        .createImageBitmap(bitmapData, { resizeWidth: DEFAULT_IMAGE_WIDTH })
-        .then((bitmap) => {
-          if (this.userData.texture == undefined) {
-            this.userData.texture = createCanvasTexture(bitmap);
-          } else {
-            this.userData.texture.image.close();
-            this.userData.texture.image = bitmap;
-            this.userData.texture.needsUpdate = true;
-          }
+      if (BROWSER_IMAGE_FORMATS.has(image.format)) {
+        const bitmapData = new Blob([image.data], { type: `image/${image.format}` });
+        self
+          .createImageBitmap(bitmapData, { resizeWidth: DEFAULT_IMAGE_WIDTH })
+          .then((bitmap) => {
+            if (this.userData.texture == undefined) {
+              this.userData.texture = createCanvasTexture(bitmap);
+            } else {
+              this.userData.texture.image.close();
+              this.userData.texture.image = bitmap;
+              this.userData.texture.needsUpdate = true;
+            }
 
-          this.removeTopicError(CREATE_BITMAP_ERR);
-          this.#materialNeedsUpdate = true;
-          this.update();
-          this.renderer.queueAnimationFrame();
-        })
-        .catch((err) => {
-          this.addTopicError(CREATE_BITMAP_ERR, `createBitmap failed: ${err.message}`);
-        });
+            this.removeTopicError(CREATE_BITMAP_ERR);
+            this.#materialNeedsUpdate = true;
+            this.update();
+            this.renderer.queueAnimationFrame();
+          })
+          .catch((err) => {
+            this.addTopicError(CREATE_BITMAP_ERR, `createBitmap failed: ${err.message}`);
+          });
+      } else if (image.format.startsWith("video/")) {
+        if (!this.#videoPlayer) {
+          this.#videoPlayer = new VideoPlayer();
+          this.#videoPlayer.on("debug", (msg) => log.debug(msg));
+          this.#videoPlayer.on("warn", (msg) => log.warn(msg));
+          this.#videoPlayer.on("error", (err) => {
+            log.error(err);
+            this.addTopicError(VIDEO_PLAYER_ERR, err.message);
+          });
+        }
+        const videoPlayer = this.#videoPlayer;
+        const timestampNs = this.userData.messageTime - this.userData.firstMessageTime!;
+        const timestampMicros = Number(timestampNs / 1000n);
+
+        const handleVideoFrame = async (videoFrame: VideoFrame | undefined) => {
+          if (videoFrame) {
+            const bitmap = await self.createImageBitmap(videoFrame, {
+              resizeWidth: DEFAULT_IMAGE_WIDTH,
+            });
+            videoFrame.close();
+
+            if (this.userData.texture == undefined) {
+              this.userData.texture = createCanvasTexture(bitmap);
+            } else {
+              this.userData.texture.image.close();
+              this.userData.texture.image = bitmap;
+              this.userData.texture.needsUpdate = true;
+            }
+
+            this.removeTopicError(VIDEO_PLAYER_ERR);
+            this.removeTopicError(CREATE_BITMAP_ERR);
+            this.#materialNeedsUpdate = true;
+            this.update();
+            this.renderer.queueAnimationFrame();
+          }
+        };
+
+        // Delta frames (P-frames) use a simple MIME type for format (ex: "video/avc"), while key
+        // frames (I-frames) use a MIME type with parameters (ex: "video/avc;codec=avc1.640028;...")
+        const type = image.format.includes(";") ? "key" : "delta";
+        if (type === "key" && !videoPlayer.isInitialized()) {
+          const decoderConfig = VideoPlayer.ParseDecoderConfig(image.format);
+          if (!decoderConfig) {
+            this.addTopicError(VIDEO_PLAYER_ERR, `Invalid VideoDecoderConfig: ${image.format}`);
+            return;
+          }
+          videoPlayer
+            .init(decoderConfig)
+            .then(async () => await videoPlayer.decode(image.data, timestampMicros, type))
+            .then(handleVideoFrame)
+            .catch((err) => this.addTopicError(VIDEO_PLAYER_ERR, (err as Error).message));
+        } else {
+          videoPlayer
+            .decode(image.data, timestampMicros, type)
+            .then(handleVideoFrame)
+            .catch((err) => this.addTopicError(VIDEO_PLAYER_ERR, (err as Error).message));
+        }
+      } else {
+        this.addTopicError(CREATE_BITMAP_ERR, `Unsupported image format: ${image.format}`);
+      }
     } else {
       const { width, height } = image;
       const prevTexture = this.userData.texture as THREE.DataTexture | undefined;

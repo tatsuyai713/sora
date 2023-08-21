@@ -2,10 +2,10 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { Box } from "@mui/material";
+import { useTheme } from "@mui/material";
 import { StoryObj } from "@storybook/react";
-import { fireEvent, userEvent } from "@storybook/testing-library";
-import produce from "immer";
+import { userEvent, within } from "@storybook/testing-library";
+import { produce } from "immer";
 import { last } from "lodash";
 import { useCallback, useMemo, useState, useEffect } from "react";
 
@@ -18,6 +18,7 @@ import {
 } from "@foxglove/studio";
 import { MessagePathInputStoryFixture } from "@foxglove/studio-base/components/MessagePathSyntax/fixture";
 import SettingsTreeEditor from "@foxglove/studio-base/components/SettingsTreeEditor";
+import Stack from "@foxglove/studio-base/components/Stack";
 import PanelSetup from "@foxglove/studio-base/stories/PanelSetup";
 
 export default {
@@ -79,6 +80,8 @@ const BasicSettings: SettingsTreeNodes = {
       messagepath: {
         label: "Message Path",
         input: "messagepath",
+        value: "/some_topic/state.foo_id.@abs",
+        supportsMathModifiers: true,
       },
       topic: {
         label: "Topic",
@@ -690,36 +693,15 @@ const TopicSettings: SettingsTreeNodes = {
 const FilterSettings: SettingsTreeNodes = {
   matchA: {
     label: "MatchA",
-    children: {
-      childA: {
-        label: "ChildA",
-      },
-      matchA: {
-        label: "MatchA",
-      },
-    },
+    children: { childA: { label: "ChildA" }, matchA: { label: "MatchA" } },
   },
   matchB: {
     label: "MatchB",
-    children: {
-      childB: {
-        label: "ChildB",
-      },
-      matchA: {
-        label: "MatchA",
-      },
-    },
+    children: { childB: { label: "ChildB" }, matchA: { label: "MatchA" } },
   },
   matchC: {
     label: "MatchC",
-    children: {
-      childC: {
-        label: "ChildB",
-      },
-      matchA: {
-        label: "MatchC",
-      },
-    },
+    children: { childC: { label: "ChildB" }, matchA: { label: "MatchC" } },
   },
 };
 
@@ -802,6 +784,7 @@ function makeGridNode(index: number): SettingsTreeNode {
 }
 
 function Wrapper({ nodes }: { nodes: SettingsTreeNodes }): JSX.Element {
+  const theme = useTheme();
   const [settingsNodes, setSettingsNodes] = useState({ ...nodes });
   const [dynamicNodes, setDynamicNodes] = useState<Record<string, SettingsTreeNode>>({});
 
@@ -861,15 +844,9 @@ function Wrapper({ nodes }: { nodes: SettingsTreeNodes }): JSX.Element {
 
   return (
     <PanelSetup fixture={MessagePathInputStoryFixture}>
-      <Box
-        display="flex"
-        flexDirection="column"
-        width="100%"
-        bgcolor="background.paper"
-        overflow="auto"
-      >
-        <SettingsTreeEditor settings={settingsTree} />
-      </Box>
+      <Stack fullWidth overflow="auto" style={{ background: theme.palette.background.paper }}>
+        <SettingsTreeEditor variant="panel" settings={settingsTree} />
+      </Stack>
     </PanelSetup>
   );
 }
@@ -879,17 +856,20 @@ export const Basics: StoryObj = {
     return <Wrapper nodes={BasicSettings} />;
   },
 
-  play: () => {
-    Array.from(document.querySelectorAll("[data-testid=node-actions-menu-button]"))
-      .slice(0, 1)
-      .forEach((node) => fireEvent.click(node));
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const [button] = await canvas.findAllByTestId("node-actions-menu-button");
+    await userEvent.click(button!);
   },
 };
 
 export const BasicsChinese: StoryObj = {
   ...Basics,
-  play: Basics.play,
   parameters: { forceLanguage: "zh" },
+};
+export const BasicsJapanese: StoryObj = {
+  ...Basics,
+  parameters: { forceLanguage: "ja" },
 };
 
 export const DisabledFields: StoryObj = {
@@ -909,14 +889,13 @@ export const PanelExamples: StoryObj = {
     return <Wrapper nodes={PanelExamplesSettings} />;
   },
 
-  play: () => {
-    Array.from(document.querySelectorAll("[data-node-function=edit-label]"))
-      .slice(0, 1)
-      .forEach((node) => {
-        fireEvent.click(node);
-        fireEvent.change(document.activeElement!, { target: { value: "Renamed Node" } });
-        fireEvent.keyDown(document.activeElement!, { key: "Enter" });
-      });
+  play: async ({ canvasElement }) => {
+    const [button] = canvasElement.querySelectorAll("[data-node-function=edit-label]");
+
+    const user = userEvent.setup();
+
+    await user.click(button!);
+    await user.keyboard("Renamed Node {Enter}");
   },
 };
 
@@ -937,12 +916,11 @@ export const Filter: StoryObj = {
     return <Wrapper nodes={FilterSettings} />;
   },
 
-  play: () => {
-    const node = document.querySelector("[data-testid=settings-filter-field] input");
-    if (node) {
-      fireEvent.click(node);
-      fireEvent.change(node, { target: { value: "matcha" } });
-    }
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const [input] = await canvas.findAllByTestId("panel-settings-filter-input");
+
+    await userEvent.type(input!, "matcha");
   },
 };
 
@@ -1041,7 +1019,7 @@ export const Vec3: StoryObj = {
 };
 
 async function clickSelect(): Promise<void> {
-  userEvent.click(document.querySelector(".MuiSelect-select")!);
+  await userEvent.click(document.querySelector(".MuiSelect-select")!);
 }
 
 export const SelectInvalidWithUndefined: StoryObj = {

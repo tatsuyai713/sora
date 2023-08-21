@@ -59,7 +59,7 @@ const useStyles = makeStyles()((theme) => ({
   },
 }));
 
-export function PanelActionsDropdown({ isUnknownPanel }: Props): JSX.Element {
+function PanelActionsDropdownComponent({ isUnknownPanel }: Props): JSX.Element {
   const { classes, cx } = useStyles();
   const [menuAnchorEl, setMenuAnchorEl] = useState<undefined | HTMLElement>(undefined);
   const [subMenuAnchorEl, setSubmenuAnchorEl] = useState<undefined | HTMLElement>(undefined);
@@ -147,16 +147,16 @@ export function PanelActionsDropdown({ isUnknownPanel }: Props): JSX.Element {
     if (!isUnknownPanel) {
       items.push(
         {
-          key: "hsplit",
-          text: "Split horizontal",
-          icon: <SplitHorizontal20Regular />,
-          onClick: () => split(panelContext?.id, "column"),
-        },
-        {
           key: "vsplit",
-          text: "Split vertical",
+          text: "Split right",
           icon: <SplitVertical20Regular />,
           onClick: () => split(panelContext?.id, "row"),
+        },
+        {
+          key: "hsplit",
+          text: "Split down",
+          icon: <SplitHorizontal20Regular />,
+          onClick: () => split(panelContext?.id, "column"),
         },
       );
     }
@@ -263,3 +263,5 @@ export function PanelActionsDropdown({ isUnknownPanel }: Props): JSX.Element {
     </div>
   );
 }
+
+export const PanelActionsDropdown = React.memo(PanelActionsDropdownComponent);

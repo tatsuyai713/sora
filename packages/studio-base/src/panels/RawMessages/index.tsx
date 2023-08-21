@@ -11,35 +11,21 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import DiffIcon from "@mui/icons-material/Difference";
-import DiffOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
-import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
-import {
-  Checkbox,
-  FormControlLabel,
-  IconButton,
-  MenuItem,
-  Select,
-  SelectChangeEvent,
-  useTheme,
-  Typography,
-} from "@mui/material";
+import { Checkbox, FormControlLabel, Typography, useTheme } from "@mui/material";
 // eslint-disable-next-line no-restricted-imports
-import { first, isEqual, get, last, padStart } from "lodash";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { first, get, isEqual, last, padStart } from "lodash";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactHoverObserver from "react-hover-observer";
 import Tree from "react-json-tree";
-import { DeepReadonly } from "ts-essentials";
 import { makeStyles } from "tss-react/mui";
 
+import { Immutable, SettingsTreeAction } from "@foxglove/studio";
 import { useDataSourceInfo } from "@foxglove/studio-base/PanelAPI";
 import EmptyState from "@foxglove/studio-base/components/EmptyState";
 import useGetItemStringWithTimezone from "@foxglove/studio-base/components/JsonTree/useGetItemStringWithTimezone";
-import MessagePathInput from "@foxglove/studio-base/components/MessagePathSyntax/MessagePathInput";
 import {
-  RosPath,
   MessagePathStructureItem,
+  RosPath,
 } from "@foxglove/studio-base/components/MessagePathSyntax/constants";
 import {
   messagePathStructures,
@@ -50,37 +36,35 @@ import { MessagePathDataItem } from "@foxglove/studio-base/components/MessagePat
 import { useMessageDataItem } from "@foxglove/studio-base/components/MessagePathSyntax/useMessageDataItem";
 import Panel from "@foxglove/studio-base/components/Panel";
 import { usePanelContext } from "@foxglove/studio-base/components/PanelContext";
-import PanelToolbar from "@foxglove/studio-base/components/PanelToolbar";
 import Stack from "@foxglove/studio-base/components/Stack";
+import { Toolbar } from "@foxglove/studio-base/panels/RawMessages/Toolbar";
 import getDiff, {
+  DiffObject,
   diffLabels,
   diffLabelsByLabelText,
-  DiffObject,
 } from "@foxglove/studio-base/panels/RawMessages/getDiff";
 import { Topic } from "@foxglove/studio-base/players/types";
+import { usePanelSettingsTreeUpdate } from "@foxglove/studio-base/providers/PanelStateContextProvider";
 import { SaveConfig } from "@foxglove/studio-base/types/panels";
+import { enumValuesByDatatypeAndField } from "@foxglove/studio-base/util/enums";
 import { useJsonTreeTheme } from "@foxglove/studio-base/util/globalConstants";
-import { enumValuesByDatatypeAndField } from "@foxglove/studio-base/util/selectors";
 import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
 
-import DiffSpan from "./DiffSpan";
+import { DiffSpan } from "./DiffSpan";
 import DiffStats from "./DiffStats";
 import MaybeCollapsedValue from "./MaybeCollapsedValue";
 import Metadata from "./Metadata";
 import Value from "./Value";
 import {
   ValueAction,
-  getValueActionForValue,
   getStructureItemForPath,
+  getValueActionForValue,
 } from "./getValueActionForValue";
-import { RawMessagesPanelConfig } from "./types";
-import { DATA_ARRAY_PREVIEW_LIMIT, generateDeepKeyPaths } from "./utils";
-
-export const CUSTOM_METHOD = "custom";
-export const PREV_MSG_METHOD = "previous message";
+import { Constants, RawMessagesPanelConfig } from "./types";
+import { DATA_ARRAY_PREVIEW_LIMIT, generateDeepKeyPaths, toggleExpansion } from "./utils";
 
 type Props = {
-  config: DeepReadonly<RawMessagesPanelConfig>;
+  config: Immutable<RawMessagesPanelConfig>;
   saveConfig: SaveConfig<RawMessagesPanelConfig>;
 };
 
@@ -105,19 +89,9 @@ function maybeDeepParse(val: unknown) {
 }
 
 const useStyles = makeStyles()((theme) => ({
-  iconButton: {
-    "&.MuiIconButton-root": {
-      padding: theme.spacing(0.25),
-    },
-  },
   topic: {
     fontFamily: fonts.SANS_SERIF,
     fontFeatureSettings: `${theme.typography.fontFeatureSettings}, "zero"`,
-  },
-  big: {
-    "&.MuiTypography-root": {
-      fontFeatureSettings: `${theme.typography.fontFeatureSettings}, "zero"`,
-    },
   },
   hoverObserver: {
     display: "inline-flex",
@@ -135,6 +109,7 @@ function RawMessages(props: Props) {
   const { openSiblingPanel } = usePanelContext();
   const { topicPath, diffMethod, diffTopicPath, diffEnabled, showFullMessageForDiff } = config;
   const { topics, datatypes } = useDataSourceInfo();
+  const updatePanelSettingsTree = usePanelSettingsTreeUpdate();
 
   const defaultGetItemString = useGetItemStringWithTimezone();
   const getItemString = useMemo(
@@ -152,29 +127,33 @@ function RawMessages(props: Props) {
     () => topicRosPath && topics.find(({ name }) => name === topicRosPath.topicName),
     [topicRosPath, topics],
   );
+
+  const structures = useMemo(() => messagePathStructures(datatypes), [datatypes]);
+
   const rootStructureItem: MessagePathStructureItem | undefined = useMemo(() => {
     if (!topic || !topicRosPath || topic.schemaName == undefined) {
       return;
     }
-    return traverseStructure(
-      messagePathStructures(datatypes)[topic.schemaName],
-      topicRosPath.messagePath,
-    ).structureItem;
-  }, [datatypes, topic, topicRosPath]);
+    return traverseStructure(structures[topic.schemaName], topicRosPath.messagePath).structureItem;
+  }, [structures, topic, topicRosPath]);
 
   const [expansion, setExpansion] = useState(config.expansion);
-  const matchedMessages = useMessageDataItem(topicPath, { historySize: 2 });
+  const [customFontSize, setCustomFontSize] = useState<number | undefined>();
+
+  // Pass an empty path to useMessageDataItem if our path doesn't resolve to a valid topic to avoid
+  // spamming the message pipeline with useless subscription requests.
+  const matchedMessages = useMessageDataItem(topic ? topicPath : "", { historySize: 2 });
   const diffMessages = useMessageDataItem(diffEnabled ? diffTopicPath : "");
 
   const diffTopicObj = diffMessages[0];
   const currTickObj = matchedMessages[matchedMessages.length - 1];
   const prevTickObj = matchedMessages[matchedMessages.length - 2];
 
-  const inTimetickDiffMode = diffEnabled && diffMethod === PREV_MSG_METHOD;
+  const inTimetickDiffMode = diffEnabled && diffMethod === Constants.PREV_MSG_METHOD;
   const baseItem = inTimetickDiffMode ? prevTickObj : currTickObj;
   const diffItem = inTimetickDiffMode ? currTickObj : diffTopicObj;
 
-  const autoExpandPaths = useMemo(() => {
+  const nodes = useMemo(() => {
     if (baseItem) {
       const data = dataWithoutWrappingArray(baseItem.queriedData.map(({ value }) => value));
       return generateDeepKeyPaths(maybeDeepParse(data), 5);
@@ -222,24 +201,9 @@ function RawMessages(props: Props) {
 
   const onLabelClick = useCallback(
     (keypath: (string | number)[]) => {
-      const key = keypath.join("~");
-      setExpansion((old) => {
-        if (old === "all") {
-          return { [key]: "c" };
-        } else if (old === "none") {
-          return { [key]: "e" };
-        } else if (old == undefined) {
-          return { [key]: autoExpandPaths.has(key) ? "c" : "e" };
-        } else {
-          if (old[key]) {
-            return { ...old, [key]: old[key] === "c" ? "e" : "c" };
-          } else {
-            return { ...old, [key]: autoExpandPaths.has(key) ? "c" : "e" };
-          }
-        }
-      });
+      setExpansion((old) => toggleExpansion(old ?? "all", nodes, keypath.join("~")));
     },
-    [autoExpandPaths],
+    [nodes],
   );
 
   useEffect(() => {
@@ -313,6 +277,8 @@ function RawMessages(props: Props) {
     [getValueLabels, onTopicPathChange, openSiblingPanel],
   );
 
+  const enumMapping = useMemo(() => enumValuesByDatatypeAndField(datatypes), [datatypes]);
+
   const valueRenderer = useCallback(
     (
       structureItem: MessagePathStructureItem | undefined,
@@ -346,7 +312,6 @@ function RawMessages(props: Props) {
               const keyPathIndex = keyPath.findIndex((key) => typeof key === "string");
               const field = keyPath[keyPathIndex];
               if (typeof field === "string") {
-                const enumMapping = enumValuesByDatatypeAndField(datatypes);
                 const datatype = childStructureItem.datatype;
                 constantName = enumMapping[datatype]?.[field]?.[String(itemValue)];
               }
@@ -374,7 +339,7 @@ function RawMessages(props: Props) {
         }}
       </ReactHoverObserver>
     ),
-    [classes.hoverObserver, datatypes, getValueLabels, onTopicPathChange, openSiblingPanel],
+    [classes.hoverObserver, enumMapping, getValueLabels, onTopicPathChange, openSiblingPanel],
   );
 
   const renderSingleTopicOrDiffOutput = useCallback(() => {
@@ -394,13 +359,13 @@ function RawMessages(props: Props) {
         return true;
       }
 
-      return autoExpandPaths.has(joinedPath);
+      return true;
     };
 
     if (topicPath.length === 0) {
       return <EmptyState>No topic selected</EmptyState>;
     }
-    if (diffEnabled && diffMethod === CUSTOM_METHOD && (!baseItem || !diffItem)) {
+    if (diffEnabled && diffMethod === Constants.CUSTOM_METHOD && (!baseItem || !diffItem)) {
       return (
         <EmptyState>{`Waiting to diff next messages from "${topicPath}" and "${diffTopicPath}"`}</EmptyState>
       );
@@ -433,7 +398,13 @@ function RawMessages(props: Props) {
       : {};
 
     return (
-      <Stack className={classes.topic} flex="auto" overflowX="hidden" paddingLeft={0.75}>
+      <Stack
+        className={classes.topic}
+        flex="auto"
+        overflowX="hidden"
+        paddingLeft={0.75}
+        data-testid="panel-scroll-container"
+      >
         <Metadata
           data={data}
           diffData={diffData}
@@ -444,10 +415,9 @@ function RawMessages(props: Props) {
         />
         {shouldDisplaySingleVal ? (
           <Typography
-            className={classes.big}
             variant="h1"
-            fontWeight="bold"
-            whiteSpace="pre-line"
+            fontSize={customFontSize}
+            whiteSpace="pre-wrap"
             style={{ wordWrap: "break-word" }}
           >
             <MaybeCollapsedValue itemLabel={String(singleVal)} />
@@ -544,6 +514,7 @@ function RawMessages(props: Props) {
                 nestedNode: ({ style }, keyPath: any) => {
                   const baseStyle = {
                     ...style,
+                    fontSize: customFontSize,
                     paddingTop: 2,
                     paddingBottom: 2,
                     marginTop: 2,
@@ -593,7 +564,11 @@ function RawMessages(props: Props) {
                 }),
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 value: ({ style }, _nodeType, keyPath: any) => {
-                  const baseStyle = { ...style, textDecoration: "inherit" };
+                  const baseStyle = {
+                    ...style,
+                    fontSize: customFontSize,
+                    textDecoration: "inherit",
+                  };
                   if (!diffEnabled) {
                     return { style: baseStyle };
                   }
@@ -629,10 +604,9 @@ function RawMessages(props: Props) {
       </Stack>
     );
   }, [
-    autoExpandPaths,
     baseItem,
-    classes.big,
     classes.topic,
+    customFontSize,
     diffEnabled,
     diffItem,
     diffMethod,
@@ -651,64 +625,57 @@ function RawMessages(props: Props) {
     valueRenderer,
   ]);
 
+  const actionHandler = useCallback((action: SettingsTreeAction) => {
+    if (action.action === "update") {
+      if (action.payload.path[0] === "general") {
+        if (action.payload.path[1] === "fontSize") {
+          setCustomFontSize(
+            action.payload.value != undefined ? (action.payload.value as number) : undefined,
+          );
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    updatePanelSettingsTree({
+      actionHandler,
+      nodes: {
+        general: {
+          label: "General",
+          fields: {
+            fontSize: {
+              label: "Font size",
+              input: "select",
+              options: [
+                { label: "auto", value: undefined },
+                ...Constants.FONT_SIZE_OPTIONS.map((value) => ({
+                  label: `${value} px`,
+                  value,
+                })),
+              ],
+              value: customFontSize,
+            },
+          },
+        },
+      },
+    });
+  }, [actionHandler, customFontSize, updatePanelSettingsTree]);
+
   return (
     <Stack flex="auto" overflow="hidden" position="relative">
-      <PanelToolbar>
-        <IconButton
-          className={classes.iconButton}
-          title="Toggle diff"
-          onClick={onToggleDiff}
-          color={diffEnabled ? "default" : "inherit"}
-          size="small"
-        >
-          {diffEnabled ? <DiffIcon fontSize="small" /> : <DiffOutlinedIcon fontSize="small" />}
-        </IconButton>
-        <IconButton
-          className={classes.iconButton}
-          title={canExpandAll ? "Expand all" : "Collapse all"}
-          onClick={onToggleExpandAll}
-          data-testid="expand-all"
-          size="small"
-        >
-          {canExpandAll ? <UnfoldMoreIcon fontSize="small" /> : <UnfoldLessIcon fontSize="small" />}
-        </IconButton>
-        <Stack fullWidth paddingLeft={0.25}>
-          <MessagePathInput
-            index={0}
-            path={topicPath}
-            onChange={onTopicPathChange}
-            inputStyle={{ height: 20 }}
-          />
-          {diffEnabled && (
-            <Stack direction="row" flex="auto">
-              <Select
-                variant="filled"
-                size="small"
-                title="Diff method"
-                value={diffMethod}
-                MenuProps={{ MenuListProps: { dense: true } }}
-                onChange={(event: SelectChangeEvent) =>
-                  saveConfig({
-                    diffMethod: event.target.value as RawMessagesPanelConfig["diffMethod"],
-                  })
-                }
-              >
-                <MenuItem value={PREV_MSG_METHOD}>{PREV_MSG_METHOD}</MenuItem>
-                <MenuItem value={CUSTOM_METHOD}>custom</MenuItem>
-              </Select>
-              {diffMethod === CUSTOM_METHOD && (
-                <MessagePathInput
-                  index={1}
-                  path={diffTopicPath}
-                  onChange={onDiffTopicPathChange}
-                  inputStyle={{ height: "100%" }}
-                  {...(topic ? { prioritizedDatatype: topic.schemaName } : {})}
-                />
-              )}
-            </Stack>
-          )}
-        </Stack>
-      </PanelToolbar>
+      <Toolbar
+        canExpandAll={canExpandAll}
+        diffEnabled={diffEnabled}
+        diffMethod={diffMethod}
+        diffTopicPath={diffTopicPath}
+        onDiffTopicPathChange={onDiffTopicPathChange}
+        onToggleDiff={onToggleDiff}
+        onToggleExpandAll={onToggleExpandAll}
+        onTopicPathChange={onTopicPathChange}
+        saveConfig={saveConfig}
+        topicPath={topicPath}
+      />
       {renderSingleTopicOrDiffOutput()}
     </Stack>
   );
@@ -716,7 +683,7 @@ function RawMessages(props: Props) {
 
 const defaultConfig: RawMessagesPanelConfig = {
   diffEnabled: false,
-  diffMethod: CUSTOM_METHOD,
+  diffMethod: Constants.CUSTOM_METHOD,
   diffTopicPath: "",
   showFullMessageForDiff: false,
   topicPath: "",

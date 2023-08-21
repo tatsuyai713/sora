@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import { StoryObj, StoryFn } from "@storybook/react";
+import { waitFor } from "@storybook/testing-library";
 import { useCallback } from "react";
 
 import Stack from "@foxglove/studio-base/components/Stack";
@@ -152,5 +153,12 @@ export const LimitWidth: StoryObj = {
     );
   },
 
-  parameters: { useReadySignal: true, colorScheme: "light" },
+  play: async (ctx) => {
+    await waitFor(() => ctx.parameters.storyReady);
+  },
+
+  parameters: {
+    colorScheme: "light",
+    useReadySignal: true,
+  },
 };

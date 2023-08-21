@@ -12,9 +12,10 @@
 //   You may not use this file except in compliance with the License.
 
 import { StoryObj } from "@storybook/react";
-import { screen, userEvent } from "@storybook/testing-library";
+import { screen, userEvent, waitFor } from "@storybook/testing-library";
+import { produce } from "immer";
 import { shuffle } from "lodash";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { makeStyles } from "tss-react/mui";
 
 import { fromSec } from "@foxglove/rostime";
@@ -151,7 +152,7 @@ const otherStateMessages = [
       { id: 42, speed: 0.06 },
     ],
   },
-];
+] as const;
 
 const withEndTime = (testFixture: Fixture, endTime: any) => ({
   ...testFixture,
@@ -222,6 +223,7 @@ const getPreloadedMessage = (seconds: number) => ({
 const emptyBlock = {
   messagesByTopic: {},
   sizeInBytes: 0,
+  needTopics: new Map(),
 };
 
 const messageCache: BlockCache = {
@@ -229,6 +231,7 @@ const messageCache: BlockCache = {
     ...[0.6, 0.7, 0.8, 0.9, 1.0].map((seconds) => ({
       sizeInBytes: 0,
       messagesByTopic: { "/preloaded_topic": [getPreloadedMessage(seconds)] },
+      needTopics: new Map(),
     })),
     emptyBlock, // 1.1
     emptyBlock, // 1.2
@@ -237,6 +240,7 @@ const messageCache: BlockCache = {
     ...[1.5, 1.6, 1.7, 1.8, 1.9].map((seconds) => ({
       sizeInBytes: 0,
       messagesByTopic: { "/preloaded_topic": [getPreloadedMessage(seconds)] },
+      needTopics: new Map(),
     })),
   ],
   startTime: fromSec(0.6),
@@ -261,7 +265,7 @@ export const fixture: Fixture = {
   },
   frame: {
     "/some_topic/location": locationMessages.map(
-      (message): MessageEvent<unknown> => ({
+      (message): MessageEvent => ({
         topic: "/some_topic/location",
         receiveTime: message.header.stamp,
         message,
@@ -272,7 +276,7 @@ export const fixture: Fixture = {
     "/some_topic/location_subset": locationMessages
       .slice(locationMessages.length / 3, (locationMessages.length * 2) / 3)
       .map(
-        (message): MessageEvent<unknown> => ({
+        (message): MessageEvent => ({
           topic: "/some_topic/location_subset",
           receiveTime: message.header.stamp,
           message,
@@ -281,7 +285,7 @@ export const fixture: Fixture = {
         }),
       ),
     "/some_topic/state": otherStateMessages.map(
-      (message): MessageEvent<unknown> => ({
+      (message): MessageEvent => ({
         topic: "/some_topic/state",
         receiveTime: message.header.stamp,
         message,
@@ -303,7 +307,7 @@ export const fixture: Fixture = {
     // prior to rendering. If the dataset is not sorted properly, the plot is jumbled.
     "/some_topic/location_shuffled": shuffle(
       locationMessages.map(
-        (message): MessageEvent<unknown> => ({
+        (message): MessageEvent => ({
           topic: "/some_topic/location_shuffled",
           receiveTime: message.header.stamp,
           message,
@@ -385,6 +389,30 @@ export const LineGraph: StoryObj = {
   },
 
   name: "line graph",
+
+  parameters: {
+    useReadySignal: true,
+  },
+};
+
+export const LineGraphWithValuesAndDisabledSeries: StoryObj = {
+  render: function Story() {
+    const readySignal = useReadySignal({ count: 3 });
+    const pauseFrame = useCallback(() => readySignal, [readySignal]);
+
+    const config = produce(exampleConfig, (draft) => {
+      draft.paths[1]!.enabled = false;
+      draft.showPlotValuesInLegend = true;
+    });
+
+    return <PlotWrapper pauseFrame={pauseFrame} config={config} />;
+  },
+
+  play: async (ctx) => {
+    await ctx.parameters.storyReady;
+  },
+
+  name: "line graph with values and disabled series",
 
   parameters: {
     useReadySignal: true,
@@ -480,17 +508,23 @@ export const LineGraphWithSettings: StoryObj = {
 
   play: async (ctx) => {
     const label = await screen.findByTestId("settings__nodeHeaderToggle__yAxis");
-    userEvent.click(label);
+    await userEvent.click(label);
     await ctx.parameters.storyReady;
   },
 };
 
 export const LineGraphWithSettingsChinese: StoryObj = {
   ...LineGraphWithSettings,
-  play: LineGraphWithSettings.play,
   parameters: {
     ...LineGraphWithSettings.parameters,
     forceLanguage: "zh",
+  },
+};
+export const LineGraphWithSettingsJapanese: StoryObj = {
+  ...LineGraphWithSettings,
+  parameters: {
+    ...LineGraphWithSettings.parameters,
+    forceLanguage: "ja",
   },
 };
 
@@ -724,6 +758,46 @@ export const DisabledPath: StoryObj = {
   },
 };
 
+export const HiddenConnectingLines: StoryObj = {
+  render: function Story() {
+    const readySignal = useReadySignal({ count: 3 });
+    const pauseFrame = useCallback(() => readySignal, [readySignal]);
+
+    return (
+      <PlotWrapper
+        pauseFrame={pauseFrame}
+        config={{
+          ...exampleConfig,
+          paths: [
+            {
+              value: "/some_topic/location.pose.velocity",
+              enabled: true,
+              showLine: false,
+              timestampMethod: "receiveTime",
+            },
+            {
+              value: "/some_topic/location.pose.acceleration",
+              enabled: true,
+              showLine: true,
+              timestampMethod: "receiveTime",
+            },
+          ],
+        }}
+      />
+    );
+  },
+
+  name: "hidden connecting lines",
+
+  parameters: {
+    useReadySignal: true,
+  },
+
+  play: async (ctx) => {
+    await ctx.parameters.storyReady;
+  },
+};
+
 export const ReferenceLine: StoryObj = {
   render: function Story() {
     const readySignal = useReadySignal({ count: 3 });
@@ -790,9 +864,10 @@ export const WithMinAndMaxYValues: StoryObj = {
 
   name: "with min and max Y values",
 
-  play: async () => {
+  play: async (ctx) => {
+    await ctx.parameters.storyReady;
     const label = await screen.findByText("Y Axis");
-    userEvent.click(label);
+    await userEvent.click(label);
   },
 };
 
@@ -1071,6 +1146,69 @@ export const IndexBasedXAxisForArray: StoryObj = {
 
   play: async (ctx) => {
     await ctx.parameters.storyReady;
+  },
+};
+
+export const IndexBasedXAxisForArrayWithUpdate: StoryObj = {
+  render: function Story() {
+    const readySignal = useReadySignal({ count: 3 });
+
+    const [ourFixture, setOurFixture] = useState(structuredClone(fixture));
+
+    const pauseFrame = useCallback(() => readySignal, [readySignal]);
+
+    useEffect(() => {
+      setOurFixture((oldValue) => {
+        return {
+          ...oldValue,
+          frame: {
+            "/some_topic/state": [
+              {
+                topic: "/some_topic/state",
+                receiveTime: { sec: 3, nsec: 0 },
+                message: {
+                  header: { stamp: { sec: 3, nsec: 0 } },
+                  items: [
+                    { id: 10, speed: 1 },
+                    { id: 42, speed: 10 },
+                  ],
+                },
+                schemaName: "msgs/State",
+                sizeInBytes: 0,
+              },
+            ],
+          },
+        };
+      });
+    }, []);
+
+    return (
+      <PlotWrapper
+        pauseFrame={pauseFrame}
+        fixture={ourFixture}
+        config={{
+          ...exampleConfig,
+          xAxisVal: "index",
+          paths: [
+            {
+              value: "/some_topic/state.items[:].speed",
+              enabled: true,
+              timestampMethod: "receiveTime",
+            },
+          ],
+        }}
+      />
+    );
+  },
+
+  name: "index-based x-axis for array with update",
+
+  parameters: {
+    useReadySignal: true,
+  },
+
+  play: async (ctx) => {
+    await waitFor(() => ctx.parameters.storyReady);
   },
 };
 

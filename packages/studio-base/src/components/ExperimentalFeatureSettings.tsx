@@ -20,7 +20,6 @@ import Stack from "@foxglove/studio-base/components/Stack";
 import { useAnalytics } from "@foxglove/studio-base/context/AnalyticsContext";
 import { useAppConfigurationValue } from "@foxglove/studio-base/hooks/useAppConfigurationValue";
 import { AppEvent } from "@foxglove/studio-base/services/IAnalytics";
-import isDesktopApp from "@foxglove/studio-base/util/isDesktopApp";
 
 const useStyles = makeStyles()({
   checkbox: {
@@ -55,34 +54,7 @@ function useFeatures(): Feature[] {
       name: t("memoryUseIndicator"),
       description: <>{t("memoryUseIndicatorDescription")}</>,
     },
-    {
-      key: AppSetting.ENABLE_NEW_TOPNAV,
-      name: t("newNavigation"),
-      description: (
-        <>
-          {t("newNavigationDescription")}
-          {isDesktopApp() && t("restartTheAppForChangesToTakeEffect")}
-        </>
-      ),
-    },
-    {
-      key: AppSetting.ENABLE_NEW_IMAGE_PANEL,
-      name: t("newImagePanel"),
-      description: <>{t("newImagePanelDescription")}</>,
-    },
   ];
-
-  if (isDesktopApp()) {
-    features.push({
-      key: AppSetting.ENABLE_ROS2_NATIVE_DATA_SOURCE,
-      name: t("ros2NativeConnection"),
-      description: (
-        <>
-          {t("ros2NativeConnectionDescription")} {t("restartTheAppForChangesToTakeEffect")}
-        </>
-      ),
-    });
-  }
 
   if (process.env.NODE_ENV === "development") {
     features.push({

@@ -19,13 +19,13 @@ import { useResizeDetector } from "react-resize-detector";
 
 import { filterMap } from "@foxglove/den/collection";
 import TimeBasedChart, {
-  Props as TimeBasedChartProps,
   ChartDefaultView,
-  TimeBasedChartTooltipData,
+  Props as TimeBasedChartProps,
 } from "@foxglove/studio-base/components/TimeBasedChart";
 import { getLineColor } from "@foxglove/studio-base/util/plotColors";
 
-import { PlotPath, isReferenceLinePlotPathType, PlotXAxisVal } from "./internalTypes";
+import { PlotPath, PlotXAxisVal, isReferenceLinePlotPathType } from "./internalTypes";
+import { PlotData } from "./plotData";
 
 // A "reference line" plot path is a numeric value. It creates a horizontal line on the plot at the specified value.
 function getAnnotationFromReferenceLine(path: PlotPath, index: number): AnnotationOptions {
@@ -62,7 +62,7 @@ type PlotChartProps = {
   showXAxisLabels: boolean;
   showYAxisLabels: boolean;
   datasets: ComponentProps<typeof TimeBasedChart>["data"]["datasets"];
-  tooltips: Map<string, TimeBasedChartTooltipData>;
+  datasetBounds: PlotData["bounds"];
   xAxisVal: PlotXAxisVal;
   currentTime?: number;
   defaultView?: ChartDefaultView;
@@ -71,17 +71,17 @@ type PlotChartProps = {
 export default function PlotChart(props: PlotChartProps): JSX.Element {
   const theme = useTheme();
   const {
-    paths,
     currentTime,
+    datasetBounds,
+    datasets,
     defaultView,
+    isSynced,
+    maxYValue,
+    minYValue,
+    onClick,
+    paths,
     showXAxisLabels,
     showYAxisLabels,
-    minYValue,
-    maxYValue,
-    datasets,
-    onClick,
-    isSynced,
-    tooltips,
     xAxisVal,
   } = props;
 
@@ -128,7 +128,7 @@ export default function PlotChart(props: PlotChartProps): JSX.Element {
         width={width ?? 0}
         height={height ?? 0}
         data={data}
-        tooltips={tooltips}
+        dataBounds={datasetBounds}
         annotations={annotations}
         type="scatter"
         yAxes={yAxes}

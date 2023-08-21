@@ -3,24 +3,28 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import { t } from "i18next";
-import { Immutable } from "immer";
 import * as THREE from "three";
 
 import { PinholeCameraModel } from "@foxglove/den/image";
 import { ImageAnnotations as FoxgloveImageAnnotations } from "@foxglove/schemas";
-import { MessageEvent, SettingsTreeAction, Topic } from "@foxglove/studio";
-import { normalizeAnnotations } from "@foxglove/studio-base/panels/Image/lib/normalizeAnnotations";
+import { Immutable, MessageEvent, SettingsTreeAction, Topic } from "@foxglove/studio";
 import {
   ImageMarker as RosImageMarker,
   ImageMarkerArray as RosImageMarkerArray,
 } from "@foxglove/studio-base/types/Messages";
+import { LabelPool } from "@foxglove/three-text";
 
 import { RenderableTopicAnnotations } from "./RenderableTopicAnnotations";
-import { ImageModeConfig } from "../../../IRenderer";
+import { Annotation } from "./types";
+import { AnyRendererSubscription, ImageModeConfig } from "../../../IRenderer";
 import { SettingsTreeEntry } from "../../../SettingsManager";
 import { IMAGE_ANNOTATIONS_DATATYPES } from "../../../foxglove";
 import { IMAGE_MARKER_ARRAY_DATATYPES, IMAGE_MARKER_DATATYPES } from "../../../ros";
 import { topicIsConvertibleToSchema } from "../../../topicIsConvertibleToSchema";
+import { sortPrefixMatchesToFront } from "../../Images/topicPrefixMatching";
+import { MessageHandler, MessageRenderState } from "../MessageHandler";
+
+type TopicName = string & { __brand: "TopicName" };
 
 interface ImageAnnotationsContext {
   initialScale: number;
@@ -31,11 +35,25 @@ interface ImageAnnotationsContext {
   config(): Immutable<ImageModeConfig>;
   updateConfig(updateHandler: (draft: ImageModeConfig) => void): void;
   updateSettingsTree(): void;
-  addSchemaSubscriptions<T>(
-    schemaNames: Set<string>,
-    handler: (messageEvent: MessageEvent<T>) => void,
-  ): void;
+  labelPool: LabelPool;
+  messageHandler: MessageHandler;
 }
+
+/** For backwards compatibility with previously published type definitions, older studio versions, and webviz */
+const LEGACY_ANNOTATION_SCHEMAS = new Set([
+  "foxglove_msgs/ImageMarkerArray",
+  "foxglove_msgs/msg/ImageMarkerArray",
+  "studio_msgs/ImageMarkerArray",
+  "studio_msgs/msg/ImageMarkerArray",
+  "webviz_msgs/ImageMarkerArray",
+]);
+
+const ALL_SUPPORTED_SCHEMAS = new Set([
+  ...IMAGE_ANNOTATIONS_DATATYPES,
+  ...IMAGE_MARKER_DATATYPES,
+  ...IMAGE_MARKER_ARRAY_DATATYPES,
+  ...LEGACY_ANNOTATION_SCHEMAS,
+]);
 
 /**
  * This class handles settings and rendering for ImageAnnotations/ImageMarkers.
@@ -43,8 +61,7 @@ interface ImageAnnotationsContext {
 export class ImageAnnotations extends THREE.Object3D {
   #context: ImageAnnotationsContext;
 
-  /** FG-3065: support multiple converters per message */
-  #renderablesByTopic = new Map<string, RenderableTopicAnnotations>();
+  #renderablesByTopic = new Map<TopicName, RenderableTopicAnnotations>();
   #cameraModel?: PinholeCameraModel;
 
   #scale: number;
@@ -59,16 +76,17 @@ export class ImageAnnotations extends THREE.Object3D {
     this.#canvasWidth = context.initialCanvasWidth;
     this.#canvasHeight = context.initialCanvasHeight;
     this.#pixelRatio = context.initialPixelRatio;
+    context.messageHandler.addListener(this.#updateFromMessageState);
+  }
 
-    this.#context.addSchemaSubscriptions(
-      IMAGE_ANNOTATIONS_DATATYPES,
-      this.#handleMessage.bind(this),
-    );
-    this.#context.addSchemaSubscriptions(IMAGE_MARKER_DATATYPES, this.#handleMessage.bind(this));
-    this.#context.addSchemaSubscriptions(
-      IMAGE_MARKER_ARRAY_DATATYPES,
-      this.#handleMessage.bind(this),
-    );
+  public getSubscriptions(): readonly AnyRendererSubscription[] {
+    return [
+      {
+        type: "schema",
+        schemaNames: ALL_SUPPORTED_SCHEMAS,
+        subscription: { handler: this.#context.messageHandler.handleAnnotations },
+      },
+    ];
   }
 
   public dispose(): void {
@@ -112,62 +130,57 @@ export class ImageAnnotations extends THREE.Object3D {
     }
   }
 
+  #updateFromMessageState = (newState: MessageRenderState) => {
+    if (newState.annotationsByTopic != undefined) {
+      for (const { originalMessage, annotations } of newState.annotationsByTopic.values()) {
+        this.#handleMessage(originalMessage, annotations);
+      }
+    }
+  };
+
   #handleMessage(
     messageEvent: MessageEvent<FoxgloveImageAnnotations | RosImageMarker | RosImageMarkerArray>,
+    annotations: Annotation[],
   ) {
-    const annotations = normalizeAnnotations(messageEvent.message, messageEvent.schemaName);
-    if (!annotations) {
-      return;
-    }
-
-    let renderable = this.#renderablesByTopic.get(messageEvent.topic);
+    let renderable = this.#renderablesByTopic.get(messageEvent.topic as TopicName);
     if (!renderable) {
-      renderable = new RenderableTopicAnnotations();
+      renderable = new RenderableTopicAnnotations(messageEvent.topic, this.#context.labelPool);
       renderable.setScale(this.#scale, this.#canvasWidth, this.#canvasHeight, this.#pixelRatio);
       renderable.setCameraModel(this.#cameraModel);
-      this.#renderablesByTopic.set(messageEvent.topic, renderable);
+      this.#renderablesByTopic.set(messageEvent.topic as TopicName, renderable);
       this.add(renderable);
     }
 
+    renderable.setOriginalMessage(messageEvent.message);
     renderable.setAnnotations(annotations);
     renderable.update();
   }
 
-  #handleSettingsAction(topic: Topic, action: SettingsTreeAction): void {
+  #handleSettingsAction(action: SettingsTreeAction): void {
     if (action.action !== "update" || action.payload.path.length < 2) {
       return;
     }
-    const { value } = action.payload;
-    if (
-      action.payload.path[0] === "imageAnnotations" &&
-      action.payload.path[2] === "visible" &&
-      typeof value === "boolean"
-    ) {
+    const { value, path } = action.payload;
+    const topic = path[1]! as TopicName;
+    if (path[0] === "imageAnnotations" && path[2] === "visible" && typeof value === "boolean") {
       this.#handleTopicVisibilityChange(topic, value);
     }
     this.#context.updateSettingsTree();
   }
 
-  // eslint-disable-next-line @foxglove/no-boolean-parameters
-  #handleTopicVisibilityChange(topic: Topic, visible: boolean): void {
+  #handleTopicVisibilityChange(
+    topic: TopicName,
+    visible: boolean, // eslint-disable-line @foxglove/no-boolean-parameters
+  ): void {
     this.#context.updateConfig((draft) => {
-      draft.annotations ??= [];
-      // FG-3065: support topic.convertTo
-      let subscription = draft.annotations.find(
-        (sub) => sub.topic === topic.name && sub.schemaName === topic.schemaName,
-      );
-      if (subscription) {
-        subscription.settings.visible = visible;
-      } else {
-        subscription = {
-          topic: topic.name,
-          schemaName: topic.schemaName,
-          settings: { visible },
-        };
-        draft.annotations.push(subscription);
-      }
+      draft.annotations ??= {};
+      const settings = (draft.annotations[topic] ??= {});
+      settings.visible = visible;
     });
-    const renderable = this.#renderablesByTopic.get(topic.name);
+    this.#context.messageHandler.setConfig({
+      annotations: this.#context.config().annotations,
+    } as Readonly<Partial<ImageModeConfig>>);
+    const renderable = this.#renderablesByTopic.get(topic);
     if (renderable) {
       renderable.visible = visible;
     }
@@ -185,30 +198,24 @@ export class ImageAnnotations extends THREE.Object3D {
       },
     });
     const config = this.#context.config();
-    let i = 0;
-    for (const topic of this.#context.topics()) {
-      if (
-        !(
-          topicIsConvertibleToSchema(topic, IMAGE_ANNOTATIONS_DATATYPES) ||
-          topicIsConvertibleToSchema(topic, IMAGE_MARKER_DATATYPES) ||
-          topicIsConvertibleToSchema(topic, IMAGE_MARKER_ARRAY_DATATYPES)
-        )
-      ) {
-        continue;
-      }
-      // FG-3065: support topic.convertTo
-      const settings = config.annotations?.find(
-        (sub) => sub.topic === topic.name && sub.schemaName === topic.schemaName,
-      )?.settings;
+
+    const annotationTopics = this.#context
+      .topics()
+      .filter((topic) => topicIsConvertibleToSchema(topic, ALL_SUPPORTED_SCHEMAS));
+
+    // Sort annotation topics with prefixes matching the image topic to the top.
+    if (config.imageTopic) {
+      sortPrefixMatchesToFront(annotationTopics, config.imageTopic, (topic) => topic.name);
+    }
+
+    for (const topic of annotationTopics) {
+      const settings = config.annotations?.[topic.name];
       entries.push({
-        // When building the tree, we just use a numeric index in the path. Inside the handler, this
-        // part of the path is ignored, and instead we pass in the `topic` directly so the handler
-        // knows which value to update in the config.
-        path: ["imageAnnotations", `${i++}`],
+        path: ["imageAnnotations", topic.name],
         node: {
           label: topic.name,
           visible: settings?.visible ?? false,
-          handler: this.#handleSettingsAction.bind(this, topic),
+          handler: this.#handleSettingsAction.bind(this),
         },
       });
     }

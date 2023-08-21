@@ -4,15 +4,22 @@
 
 import { createContext, useContext } from "react";
 
+import { AppBarMenuItem } from "@foxglove/studio-base/components/AppBar/types";
+import { LayoutData } from "@foxglove/studio-base/context/CurrentLayoutContext";
+
 interface IAppContext {
   appBarLayoutButton?: JSX.Element;
-  syncAdapters?: readonly JSX.Element[];
+  appBarMenuItems?: readonly AppBarMenuItem[];
   createEvent?: (args: {
     deviceId: string;
     timestamp: string;
     durationNanos: string;
     metadata: Record<string, string>;
   }) => Promise<void>;
+  syncAdapters?: readonly JSX.Element[];
+  workspaceExtensions?: readonly JSX.Element[];
+  layoutEmptyState?: JSX.Element;
+  importLayoutFile?: (fileName: string, data: LayoutData) => Promise<void>;
 }
 
 const AppContext = createContext<IAppContext>({});

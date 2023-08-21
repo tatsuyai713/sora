@@ -16,18 +16,18 @@ import {
   MISSING_TRANSFORM,
 } from "@foxglove/studio-base/panels/ThreeDeeRender/renderables/transforms";
 import { BaseSettings } from "@foxglove/studio-base/panels/ThreeDeeRender/settings";
-import { MAX_DURATION, Pose } from "@foxglove/studio-base/panels/ThreeDeeRender/transforms";
+import { MAX_DURATION } from "@foxglove/studio-base/panels/ThreeDeeRender/transforms";
 import { updatePose } from "@foxglove/studio-base/panels/ThreeDeeRender/updatePose";
 
 import { LaserScanMaterial } from "./LaserScans";
 import {
-  baseColorModeSettingsNode,
+  colorModeSettingsFields,
   colorHasTransparency,
   ColorModeSettings,
   FS_SRGB_TO_LINEAR,
   INTENSITY_FIELDS,
   RGBA_PACKED_FIELDS,
-} from "./pointClouds/colors";
+} from "./colorMode";
 import { POINTCLOUD_DATATYPES as FOXGLOVE_POINTCLOUD_DATATYPES } from "../foxglove";
 import { PointCloud2, POINTCLOUD_DATATYPES as ROS_POINTCLOUD_DATATYPES, PointField } from "../ros";
 
@@ -63,7 +63,7 @@ export const DEFAULT_POINT_SETTINGS: LayerSettingsPointExtension = {
 };
 
 export const POINT_CLOUD_REQUIRED_FIELDS = ["x", "y", "z"];
-export const POINT_SHAPE_OPTIONS = [
+const POINT_SHAPE_OPTIONS = [
   { label: "Circle", value: "circle" },
   { label: "Square", value: "square" },
 ];
@@ -86,36 +86,46 @@ export function pointSettingsNode(
   const pointShape = config.pointShape ?? "circle";
   const decayTime = config.decayTime;
 
-  const node = baseColorModeSettingsNode(messageFields, config, topic, defaultSettings, {
-    supportsPackedRgbModes: ROS_POINTCLOUD_DATATYPES.has(topic.schemaName),
-    supportsRgbaFieldsMode: FOXGLOVE_POINTCLOUD_DATATYPES.has(topic.schemaName),
+  const colorModeFields = colorModeSettingsFields({
+    msgFields: messageFields,
+    config,
+    defaults: defaultSettings,
+    modifiers: {
+      supportsPackedRgbModes: ROS_POINTCLOUD_DATATYPES.has(topic.schemaName),
+      supportsRgbaFieldsMode: FOXGLOVE_POINTCLOUD_DATATYPES.has(topic.schemaName),
+    },
   });
-  node.fields = {
-    pointSize: {
-      label: "Point size",
-      input: "number",
-      step: 1,
-      placeholder: "2",
-      precision: 2,
-      value: pointSize,
-      min: 0,
+
+  const node: SettingsTreeNode = {
+    order: topic.name.toLocaleLowerCase(),
+    visible: config.visible ?? defaultSettings.visible,
+    fields: {
+      pointSize: {
+        label: "Point size",
+        input: "number",
+        step: 1,
+        placeholder: "2",
+        precision: 2,
+        value: pointSize,
+        min: 0,
+      },
+      pointShape: {
+        label: "Point shape",
+        input: "select",
+        options: POINT_SHAPE_OPTIONS,
+        value: pointShape,
+      },
+      decayTime: {
+        label: "Decay time",
+        input: "number",
+        step: 0.5,
+        placeholder: "0 seconds",
+        min: 0,
+        precision: 3,
+        value: decayTime,
+      },
+      ...colorModeFields,
     },
-    pointShape: {
-      label: "Point shape",
-      input: "select",
-      options: POINT_SHAPE_OPTIONS,
-      value: pointShape,
-    },
-    decayTime: {
-      label: "Decay time",
-      input: "number",
-      step: 0.5,
-      placeholder: "0 seconds",
-      min: 0,
-      precision: 3,
-      value: decayTime,
-    },
-    ...node.fields,
   };
 
   return node;
@@ -195,7 +205,6 @@ export function createGeometry(topic: string, usage: THREE.Usage): DynamicBuffer
 }
 
 type Material = THREE.PointsMaterial | LaserScanMaterial;
-type Points = THREE.Points<DynamicBufferGeometry, Material>;
 
 export function pointCloudColorEncoding<T extends LayerSettingsPointExtension>(
   settings: T,
@@ -213,24 +222,45 @@ export function pointCloudColorEncoding<T extends LayerSettingsPointExtension>(
   }
 }
 
-export function createPoints(
-  topic: string,
-  pose: Pose,
-  geometry: DynamicBufferGeometry,
-  material: Material,
-  pickingMaterial: THREE.Material,
-  instancePickingMaterial: THREE.Material | undefined,
-): Points {
-  const points = new THREE.Points<DynamicBufferGeometry, Material>(geometry, material);
-  // We don't calculate the bounding sphere for points, so frustum culling is disabled
-  points.frustumCulled = false;
-  points.name = `${topic}:PointCloud:points`;
-  points.userData = {
-    pickingMaterial,
-    instancePickingMaterial,
-    pose,
-  };
-  return points;
+export class PointsRenderable<TUserData extends BaseUserData = BaseUserData> extends Renderable<
+  TUserData,
+  /*TRenderer=*/ undefined
+> {
+  #points: THREE.Points<DynamicBufferGeometry, Material>;
+  public readonly geometry: DynamicBufferGeometry;
+  public override pickableInstances = true;
+
+  public constructor(
+    name: string,
+    userData: TUserData,
+    geometry: DynamicBufferGeometry,
+    material: Material,
+    pickingMaterial: THREE.Material,
+    instancePickingMaterial: THREE.Material,
+  ) {
+    super(name, undefined, userData);
+    this.geometry = geometry;
+
+    const points = new THREE.Points<DynamicBufferGeometry, Material>(geometry, material);
+    // We don't calculate the bounding sphere for points, so frustum culling is disabled
+    points.frustumCulled = false;
+    points.name = `${userData.topic}:PointCloud:points`;
+    points.userData = {
+      pickingMaterial,
+      instancePickingMaterial,
+      pose: userData.pose,
+    };
+    this.#points = points;
+    this.add(points);
+  }
+
+  public override dispose(): void {
+    this.#points.geometry.dispose();
+  }
+
+  public updateMaterial(material: Material): void {
+    this.#points.material = material;
+  }
 }
 
 // Fragment shader chunk to convert sRGB to linear RGB
@@ -341,73 +371,73 @@ export function createInstancePickingMaterial<T extends LayerSettingsPointExtens
   });
 }
 
+type RenderObjectHistoryUserData = BaseUserData & {
+  topic: string;
+  settings: LayerSettingsPointExtension;
+};
+
+type DisposableObject = THREE.Object3D & { dispose(): void };
+type HistoryEntry<TRenderable extends DisposableObject> = {
+  receiveTime: bigint;
+  messageTime: bigint;
+  renderable: TRenderable;
+};
+
 /**
  * Class that handles lifecycle of 3d object history over the decay time
  * This class encapsulates the functionality of showing the history of an object within a specified decay time.
  * Meant to be extensible for all kinds of renderables that need to show old points over decay time.
  * See LaserScansRenderable and PointCloudsRenderable for examples.
  */
-
-type RenderObjectHistoryUserData = BaseUserData & {
-  topic: string;
-  settings: LayerSettingsPointExtension;
-  material: THREE.Material;
-  pickingMaterial: THREE.Material;
-};
-
-type ThreeObject = THREE.Points<DynamicBufferGeometry> | THREE.LineSegments<DynamicBufferGeometry>;
-type HistoryEntry = { receiveTime: bigint; messageTime: bigint; object3d: ThreeObject };
-export class RenderObjectHistory<ParentRenderable extends Renderable<RenderObjectHistoryUserData>> {
-  public history: HistoryEntry[];
-  private renderable: ParentRenderable;
-  private renderer: IRenderer;
+export class RenderObjectHistory<TRenderable extends DisposableObject> {
+  #history: HistoryEntry<TRenderable>[];
+  #parentRenderable: Renderable<RenderObjectHistoryUserData>;
+  #renderer: IRenderer;
 
   public constructor({
     initial,
     renderer,
     parentRenderable,
   }: {
-    initial: HistoryEntry;
+    initial: HistoryEntry<TRenderable>;
     renderer: IRenderer;
-    parentRenderable: ParentRenderable;
+    parentRenderable: Renderable<RenderObjectHistoryUserData>;
   }) {
-    this.history = [initial];
-    this.renderer = renderer;
-    this.renderable = parentRenderable;
+    this.#history = [initial];
+    this.#renderer = renderer;
+    this.#parentRenderable = parentRenderable;
   }
 
-  public addHistoryEntry(entry: HistoryEntry): void {
-    this.history.push(entry);
+  public addHistoryEntry(entry: HistoryEntry<TRenderable>): void {
+    this.#history.push(entry);
   }
 
-  public updateMaterial(material: THREE.Material): void {
-    for (const entry of this.history) {
-      entry.object3d.material = material;
-    }
+  public forEach(callback: (entry: HistoryEntry<TRenderable>) => void): void {
+    this.#history.forEach(callback);
   }
 
   public updateHistoryFromCurrentTime(currentTime: bigint): void {
     // Remove expired entries from the history of points when decayTime is enabled
-    const pointsHistory = this.history;
-    const decayTime = this.renderable.userData.settings.decayTime;
+    const pointsHistory = this.#history;
+    const decayTime = this.#parentRenderable.userData.settings.decayTime;
     const expireTime =
       decayTime > 0 ? currentTime - BigInt(Math.round(decayTime * 1e9)) : MAX_DURATION;
     while (pointsHistory.length > 1 && pointsHistory[0]!.receiveTime < expireTime) {
-      const entry = this.history.shift()!;
-      this.renderable.remove(entry.object3d);
-      entry.object3d.geometry.dispose();
+      const entry = this.#history.shift()!;
+      this.#parentRenderable.remove(entry.renderable);
+      entry.renderable.dispose();
     }
   }
 
   public updatePoses(currentTime: bigint, renderFrameId: string, fixedFrameId: string): void {
     // Update the pose on each entry
     let hadTfError = false;
-    for (const entry of this.history) {
+    for (const entry of this.#history) {
       const srcTime = entry.messageTime;
-      const frameId = this.renderable.userData.frameId;
+      const frameId = this.#parentRenderable.userData.frameId;
       const updated = updatePose(
-        entry.object3d,
-        this.renderer.transformTree,
+        entry.renderable,
+        this.#renderer.transformTree,
         renderFrameId,
         fixedFrameId,
         frameId,
@@ -416,8 +446,8 @@ export class RenderObjectHistory<ParentRenderable extends Renderable<RenderObjec
       );
       if (!updated && !hadTfError) {
         const message = missingTransformMessage(renderFrameId, fixedFrameId, frameId);
-        this.renderer.settings.errors.add(
-          this.renderable.userData.settingsPath,
+        this.#renderer.settings.errors.add(
+          this.#parentRenderable.userData.settingsPath,
           MISSING_TRANSFORM,
           message,
         );
@@ -426,22 +456,25 @@ export class RenderObjectHistory<ParentRenderable extends Renderable<RenderObjec
     }
   }
 
-  public latest(): { receiveTime: bigint; messageTime: bigint; object3d: ThreeObject } | undefined {
-    return this.history[this.history.length - 1];
+  public latest(): HistoryEntry<TRenderable> {
+    if (this.#history.length === 0) {
+      throw new Error("RenderObjectHistory is empty");
+    }
+    return this.#history[this.#history.length - 1]!;
   }
 
+  /** Removes all but the last renderable, which would be the current object used in rendering. */
   public clearHistory(): void {
-    // removes all but the last element of the array, which would be the current object used in rendering
-    for (const entry of this.history.splice(0, this.history.length - 1)) {
-      entry.object3d.geometry.dispose();
-      this.renderable.remove(entry.object3d);
+    for (const entry of this.#history.splice(0, this.#history.length - 1)) {
+      entry.renderable.dispose();
+      this.#parentRenderable.remove(entry.renderable);
     }
   }
 
   public dispose(): void {
-    for (const entry of this.history) {
-      entry.object3d.geometry.dispose();
+    for (const entry of this.#history) {
+      entry.renderable.dispose();
     }
-    this.history.length = 0;
+    this.#history.length = 0;
   }
 }

@@ -6,11 +6,11 @@
 
 - [Node.js](https://nodejs.org/en/) v16.10+
 - [Git LFS](https://git-lfs.github.com/)
-- [Visual Studio Code](https://code.visualstudio.com/) – Recommended
 
 ## Getting started
 
 1. Clone repo
+1. Run `git lfs pull` to ensure Git LFS objects are up to date
 1. Run `corepack enable` and `yarn install`
    - If you still get errors about corepack after running `corepack enable`, try uninstalling and reinstalling Node.js. Ensure that Yarn is not separately installed from another source, but is installed _via_ corepack.
 1. Launch the development environment:
@@ -21,6 +21,10 @@ $ yarn web:serve
 
 # To launch the storybook:
 $ yarn storybook
+
+# Advanced usage: running webpack and electron on different computers (or VMs) on the same network
+$ yarn desktop:serve --host 192.168.xxx.yyy         # the address where electron can reach the webpack dev server
+$ yarn dlx electron@22.1.0 .webpack # launch the version of electron for the current computer's platform
 ```
 
 ### Other useful commands
@@ -37,6 +41,7 @@ $ yarn test:watch   # run tests on changed files
 At this time, first-class support for sviz is provided in English only. Localization into other languages is available on a best-effort basis, with translations provided by community volunteers. Current community supported-languages are:
 
 - Chinese
+- Japanese
 
 Translation support is implemented using [`react-i18next`](https://react.i18next.com).
 

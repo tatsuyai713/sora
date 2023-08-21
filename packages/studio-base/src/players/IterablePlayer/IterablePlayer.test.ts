@@ -12,6 +12,7 @@ import {
   PlayerPresence,
   PlayerState,
 } from "@foxglove/studio-base/players/types";
+import { mockTopicSelection } from "@foxglove/studio-base/test/mocks/mockTopicSelection";
 
 import {
   IIterableSource,
@@ -40,9 +41,7 @@ class TestSource implements IIterableSource {
     _args: MessageIteratorArgs,
   ): AsyncIterableIterator<Readonly<IteratorResult>> {}
 
-  public async getBackfillMessages(
-    _args: GetBackfillMessagesArgs,
-  ): Promise<MessageEvent<unknown>[]> {
+  public async getBackfillMessages(_args: GetBackfillMessagesArgs): Promise<MessageEvent[]> {
     return [];
   }
 }
@@ -53,9 +52,9 @@ type PlayerStateWithoutPlayerId = Omit<PlayerState, "playerId">;
 class PlayerStateStore {
   public done: Promise<PlayerStateWithoutPlayerId[]>;
 
-  private playerStates: PlayerStateWithoutPlayerId[] = [];
-  private expected: number;
-  private resolve: (arg0: PlayerStateWithoutPlayerId[]) => void = () => {
+  #playerStates: PlayerStateWithoutPlayerId[] = [];
+  #expected: number;
+  #resolve: (arg0: PlayerStateWithoutPlayerId[]) => void = () => {
     // no-op
   };
 
@@ -63,9 +62,9 @@ class PlayerStateStore {
    * @param expected - number of state transitions to be listened to before done is resolved
    */
   public constructor(expected: number) {
-    this.expected = expected;
+    this.#expected = expected;
     this.done = new Promise((resolve) => {
-      this.resolve = resolve;
+      this.#resolve = resolve;
     });
   }
 
@@ -74,13 +73,13 @@ class PlayerStateStore {
   // if it exceeds it will throw an error and break the test
   public async add(state: PlayerState): Promise<void> {
     const { playerId: _playerId, ...rest } = state;
-    this.playerStates.push(rest);
-    if (this.playerStates.length === this.expected) {
-      this.resolve(this.playerStates);
+    this.#playerStates.push(rest);
+    if (this.#playerStates.length === this.#expected) {
+      this.#resolve(this.#playerStates);
     }
-    if (this.playerStates.length > this.expected) {
+    if (this.#playerStates.length > this.#expected) {
       const error = new Error(
-        `Expected: ${this.expected} messages, received: ${this.playerStates.length}`,
+        `Expected: ${this.#expected} messages, received: ${this.#playerStates.length}`,
       );
       this.done = Promise.reject(error);
       throw error;
@@ -92,10 +91,10 @@ class PlayerStateStore {
    * @param expected - number of state transitions to be listened to before done is resolved
    */
   public reset(expected: number): void {
-    this.expected = expected;
-    this.playerStates = [];
+    this.#expected = expected;
+    this.#playerStates = [];
     this.done = new Promise((resolve) => {
-      this.resolve = resolve;
+      this.#resolve = resolve;
     });
   }
 }
@@ -194,7 +193,7 @@ describe("IterablePlayer", () => {
     await store.done;
 
     // Reset store to get state from the seeks
-    store.reset(3);
+    store.reset(2);
 
     // replace the message iterator with our own implementation
     // This implementation performs a seekPlayback during backfill.
@@ -275,7 +274,7 @@ describe("IterablePlayer", () => {
     // The state order:
     // 1. a state update completing the second seek
     // 1. a state update for moving to idle
-    expect(playerStates).toEqual([withMessages, baseState, baseState]);
+    expect(playerStates).toEqual([withMessages, baseState]);
 
     player.close();
   });
@@ -295,7 +294,7 @@ describe("IterablePlayer", () => {
     await store.done;
 
     // Reset store to get state from the seeks
-    store.reset(4);
+    store.reset(3);
 
     // replace the message iterator with our own implementation
     source.getBackfillMessages = async function () {
@@ -353,7 +352,7 @@ describe("IterablePlayer", () => {
     // The state order:
     // 1. a state update completing the second seek
     // 1. a state update for moving to idle
-    expect(playerStates).toEqual([bufferingState, baseState, baseState, baseState]);
+    expect(playerStates).toEqual([bufferingState, baseState, baseState]);
 
     player.close();
   });
@@ -412,7 +411,7 @@ describe("IterablePlayer", () => {
       enablePreload: false,
       sourceId: "test",
     });
-    const store = new PlayerStateStore(5);
+    const store = new PlayerStateStore(4);
     player.setSubscriptions([{ topic: "foo" }]);
     player.setListener(async (state) => await store.add(state));
 
@@ -457,7 +456,6 @@ describe("IterablePlayer", () => {
         presence: PlayerPresence.INITIALIZING,
         progress: {},
       },
-      { ...baseState, progress: {} },
       { ...baseState, progress: {} },
       { ...baseState, progress: {} },
       baseState,
@@ -576,7 +574,7 @@ describe("IterablePlayer", () => {
     await store.done;
 
     // Call set subscriptions and add a new topic
-    store.reset(3);
+    store.reset(2);
     player.setSubscriptions([{ topic: "foo" }, { topic: "bar" }]);
 
     await store.done;
@@ -586,7 +584,7 @@ describe("IterablePlayer", () => {
         {
           start: { sec: 0, nsec: 0 },
           end: { sec: 1, nsec: 0 },
-          topics: ["foo"],
+          topics: mockTopicSelection("foo"),
           consumptionType: "partial",
         },
       ],
@@ -594,7 +592,7 @@ describe("IterablePlayer", () => {
         {
           start: { sec: 0, nsec: 99000001 },
           end: { sec: 1, nsec: 0 },
-          topics: ["bar", "foo"],
+          topics: mockTopicSelection("bar", "foo"),
           consumptionType: "partial",
         },
       ],

@@ -37,9 +37,10 @@ const nodeId = "nodeId";
 const nodeUserCode = `
   export const inputs = ["/np_input"];
   export const output = "${DEFAULT_STUDIO_NODE_PREFIX}1";
+  const stamp = Math.random(); // stamp used to distinguish different instances of a script.
   let lastStamp, lastReceiveTime;
-  export default (message: { message: { payload: string } }): { custom_np_field: string, value: string } => {
-    return { custom_np_field: "abc", value: message.message.payload };
+  export default (message: { message: { payload: string } }): { custom_np_field: string, value: string, stamp: number } => {
+    return { custom_np_field: "abc", value: message.message.payload, stamp  };
   };
 `;
 
@@ -129,7 +130,7 @@ const setListenerHelper = (player: UserNodePlayer, numPromises: number = 1) => {
   const signals = [...new Array(numPromises)].map(() =>
     signal<{
       topicNames: string[];
-      messages: readonly MessageEvent<unknown>[];
+      messages: readonly MessageEvent[];
       progress?: PlayerState["progress"];
       topics: Topic[] | undefined;
       datatypes: RosDatatypes | undefined;
@@ -223,7 +224,7 @@ describe("UserNodePlayer", () => {
       });
       expect(fakePlayer.seekPlayback).not.toHaveBeenCalled();
       userNodePlayer.seekPlayback({ sec: 2, nsec: 2 });
-      expect(fakePlayer.seekPlayback).toHaveBeenCalledWith({ sec: 2, nsec: 2 }, undefined);
+      expect(fakePlayer.seekPlayback).toHaveBeenCalledWith({ sec: 2, nsec: 2 });
     });
 
     it("delegates publishing to underlying player", () => {
@@ -283,7 +284,7 @@ describe("UserNodePlayer", () => {
         setUserNodeDiagnostics: mockSetNodeDiagnostics,
       });
 
-      const [done1, done2] = setListenerHelper(userNodePlayer, 2);
+      const [done1, done2, done3] = setListenerHelper(userNodePlayer, 3);
 
       const activeData = {
         ...basicPlayerState,
@@ -294,9 +295,11 @@ describe("UserNodePlayer", () => {
       };
       await fakePlayer.emit({ activeData });
 
-      void userNodePlayer.setUserNodes({
+      await userNodePlayer.setUserNodes({
         nodeId: { name: `${DEFAULT_STUDIO_NODE_PREFIX}1`, sourceCode: nodeUserCode },
       });
+      await done1;
+
       await fakePlayer.emit({
         activeData: {
           ...activeData,
@@ -304,12 +307,12 @@ describe("UserNodePlayer", () => {
         },
       });
 
-      let { topicNames, messages } = await done1!;
+      let { topicNames, messages } = await done2!;
 
       expect(messages.length).toEqual(0);
-      expect(topicNames).toEqual([]);
+      expect(topicNames).toEqual([`${DEFAULT_STUDIO_NODE_PREFIX}1`]);
 
-      ({ topicNames, messages } = await done2!);
+      ({ topicNames, messages } = await done3!);
       expect(messages.length).toEqual(0);
       expect(topicNames).toEqual(["/np_input", `${DEFAULT_STUDIO_NODE_PREFIX}1`]);
 
@@ -337,11 +340,11 @@ describe("UserNodePlayer", () => {
         setUserNodeDiagnostics: mockSetNodeDiagnostics,
       });
 
-      void userNodePlayer.setUserNodes({
+      const [done1, done2, done3] = setListenerHelper(userNodePlayer, 3);
+
+      await userNodePlayer.setUserNodes({
         nodeId: { name: `${DEFAULT_STUDIO_NODE_PREFIX}1`, sourceCode: nodeUserCode },
       });
-
-      const [done1, done2, done3] = setListenerHelper(userNodePlayer, 3);
 
       const activeData: PlayerStateActiveData = {
         ...basicPlayerState,
@@ -364,8 +367,27 @@ describe("UserNodePlayer", () => {
             `${DEFAULT_STUDIO_NODE_PREFIX}1`,
             {
               definitions: [
-                { name: "custom_np_field", type: "string", isArray: false, isComplex: false },
-                { name: "value", type: "string", isArray: false, isComplex: false },
+                {
+                  name: "custom_np_field",
+                  type: "string",
+                  isArray: false,
+                  isComplex: false,
+                  arrayLength: undefined,
+                },
+                {
+                  name: "value",
+                  type: "string",
+                  isArray: false,
+                  isComplex: false,
+                  arrayLength: undefined,
+                },
+                {
+                  name: "stamp",
+                  type: "float64",
+                  isArray: false,
+                  isComplex: false,
+                  arrayLength: undefined,
+                },
               ],
             },
           ],
@@ -384,58 +406,6 @@ describe("UserNodePlayer", () => {
       const { topics: thirdTopics, datatypes: thirdDatatypes } = (await done3)!;
       expect(thirdTopics).not.toBe(firstTopics);
       expect(thirdDatatypes).not.toBe(firstDatatypes);
-    });
-
-    it("gets memoized version of messages if they have not changed", async () => {
-      const fakePlayer = new FakePlayer();
-      const mockAddUserNodeLogs = jest.fn();
-      const userNodePlayer = new UserNodePlayer(fakePlayer, {
-        ...defaultUserNodeActions,
-        setUserNodeDiagnostics: jest.fn(),
-        addUserNodeLogs: mockAddUserNodeLogs,
-      });
-
-      userNodePlayer.setSubscriptions([{ topic: `${DEFAULT_STUDIO_NODE_PREFIX}1` }]);
-      await userNodePlayer.setUserNodes({
-        nodeId: {
-          name: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
-          sourceCode: `${nodeUserCode}\nlog("LOG VALUE HERE");`,
-        },
-      });
-
-      const messagesArray = [upstreamFirst];
-
-      const [done, nextDone] = setListenerHelper(userNodePlayer, 2);
-
-      const topics: Topic[] = [{ name: "/np_input", schemaName: `${DEFAULT_STUDIO_NODE_PREFIX}1` }];
-      const datatypes = new Map(Object.entries({ foo: { definitions: [] } }));
-
-      await fakePlayer.emit({
-        activeData: {
-          ...basicPlayerState,
-          messages: messagesArray,
-          currentTime: { sec: 0, nsec: 0 },
-          topics,
-          datatypes,
-        },
-      });
-
-      const { messages } = (await done)!;
-
-      await fakePlayer.emit({
-        activeData: {
-          ...basicPlayerState,
-          messages: messagesArray,
-          currentTime: { sec: 0, nsec: 0 },
-          topics,
-          datatypes,
-        },
-      });
-
-      const { messages: newMessages }: any = await nextDone;
-
-      expect(mockAddUserNodeLogs).toHaveBeenCalledTimes(1);
-      expect(messages).toBe(newMessages);
     });
 
     it("outputs updated messages on next when user script is changed with no new messages as part of active state", async () => {
@@ -496,6 +466,8 @@ describe("UserNodePlayer", () => {
           sourceCode: nodeUserCodeAfter,
         },
       });
+
+      // Pretend the player emits again (playing) but not our user script input messages
       await fakePlayer.emit({
         activeData: {
           ...basicPlayerState,
@@ -508,13 +480,103 @@ describe("UserNodePlayer", () => {
 
       const { messages: newMessages }: any = await nextDone;
 
-      expect(
-        newMessages.find(
-          (message: MessageEvent<unknown>) =>
-            (message.message as { custom_np_field?: string }).custom_np_field ===
-            "COMPLETELY_DIFFERENT",
-        ),
-      ).toBeTruthy();
+      // We should still receive updated output messages even though there were no new input messages
+      expect(newMessages).toEqual([
+        {
+          message: {
+            custom_np_field: "COMPLETELY_DIFFERENT",
+            value: "bar",
+          },
+          receiveTime: {
+            nsec: 1,
+            sec: 0,
+          },
+          schemaName: "/studio_script/1",
+          sizeInBytes: 0,
+          topic: "/studio_script/1",
+        },
+      ]);
+    });
+
+    it("outputs updated messages on when user script is changed and player is paused", async () => {
+      const fakePlayer = new FakePlayer();
+      const mockAddUserNodeLogs = jest.fn();
+      const userNodePlayer = new UserNodePlayer(fakePlayer, {
+        ...defaultUserNodeActions,
+        setUserNodeDiagnostics: jest.fn(),
+        addUserNodeLogs: mockAddUserNodeLogs,
+      });
+
+      userNodePlayer.setSubscriptions([{ topic: `${DEFAULT_STUDIO_NODE_PREFIX}1` }]);
+      const nodeUserCodeBefore = `
+        export const inputs = ["/np_input"];
+        export const output = "${DEFAULT_STUDIO_NODE_PREFIX}1";
+        let lastStamp, lastReceiveTime;
+        export default (message: { message: { payload: string } }): { custom_np_field: string, value: string } => {
+          return { custom_np_field: "abc", value: message.message.payload };
+        };
+      `;
+      await userNodePlayer.setUserNodes({
+        nodeId: {
+          name: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
+          sourceCode: nodeUserCodeBefore,
+        },
+      });
+
+      const messagesArray = [upstreamFirst];
+
+      const [done, nextDone] = setListenerHelper(userNodePlayer, 2);
+
+      const topics: Topic[] = [{ name: "/np_input", schemaName: `${DEFAULT_STUDIO_NODE_PREFIX}1` }];
+      const datatypes = new Map(Object.entries({ foo: { definitions: [] } }));
+
+      await fakePlayer.emit({
+        activeData: {
+          ...basicPlayerState,
+          isPlaying: false,
+          messages: messagesArray,
+          currentTime: { sec: 0, nsec: 0 },
+          topics,
+          datatypes,
+        },
+      });
+
+      (await done)!;
+
+      const nodeUserCodeAfter = `
+        export const inputs = ["/np_input"];
+        export const output = "${DEFAULT_STUDIO_NODE_PREFIX}1";
+        let lastStamp, lastReceiveTime;
+        export default (message: { message: { payload: string } }): { custom_np_field: string, value: string } => {
+          return { custom_np_field: "COMPLETELY_DIFFERENT", value: message.message.payload };
+        };
+      `;
+      await userNodePlayer.setUserNodes({
+        nodeId: {
+          name: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
+          sourceCode: nodeUserCodeAfter,
+        },
+      });
+
+      const { messages: newMessages }: any = await nextDone;
+
+      // The internal re-processing from updating the user script should only contain the new script
+      // output and not upstream messages
+      expect(newMessages).toEqual([
+        {
+          message: {
+            custom_np_field: "COMPLETELY_DIFFERENT",
+            value: "bar",
+          },
+          receiveTime: {
+            nsec: 1,
+            sec: 0,
+          },
+          schemaName: "/studio_script/1",
+          sizeInBytes: 0,
+          topic: "/studio_script/1",
+        },
+      ]);
     });
 
     it("subscribes to underlying topics when nodeInfo is added", async () => {
@@ -540,6 +602,54 @@ describe("UserNodePlayer", () => {
       userNodePlayer.setSubscriptions(topicNames.map((topic) => ({ topic })));
       await delay(10); // wait for subscriptions to take effect
       expect(fakePlayer.subscriptions).toEqual([{ topic: "/np_input" }]);
+    });
+
+    it("passes through sliced subscriptions", async () => {
+      const fakePlayer = new FakePlayer();
+      const userNodePlayer = new UserNodePlayer(fakePlayer, defaultUserNodeActions);
+      const topicNames = ["/np_input"];
+      void userNodePlayer.setUserNodes({
+        nodeId: { name: "someNodeName", sourceCode: nodeUserCode },
+      });
+      userNodePlayer.setSubscriptions(topicNames.map((topic) => ({ topic, fields: ["a"] })));
+      await delay(10); // wait for subscriptions to take effect
+
+      // A direct subscription to a topic should maintain the requested fields.
+      expect(fakePlayer.subscriptions).toEqual([{ topic: "/np_input", fields: ["a"] }]);
+    });
+
+    it("requests full subscriptions for input topics", async () => {
+      const fakePlayer = new FakePlayer();
+      const userNodePlayer = new UserNodePlayer(fakePlayer, defaultUserNodeActions);
+
+      // Bootstrap the node.
+      const done = setListenerHelper(userNodePlayer)[0]!;
+      await fakePlayer.emit({
+        activeData: {
+          ...basicPlayerState,
+          messages: [],
+          currentTime: { sec: 0, nsec: 0 },
+          topics: [{ name: "/np_input", schemaName: "std_msgs/Header" }],
+          datatypes: new Map(Object.entries({ foo: { definitions: [] } })),
+        },
+      });
+      await done;
+      void userNodePlayer.setUserNodes({
+        nodeId: { name: "someNodeName", sourceCode: nodeUserCode },
+      });
+
+      // Subscribe to a slice of the output topic and a slice of the input topic.
+      userNodePlayer.setSubscriptions([
+        { topic: "/np_input", fields: ["a"] },
+        { topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`, fields: ["a"] },
+      ]);
+
+      // Wait for subscriptions to take effect.
+      await delay(10);
+
+      // The underlying player subscription should not be sliced since we don't know which fields of
+      // the message the script will use.
+      expect(fakePlayer.subscriptions).toEqual([{ topic: "/np_input", preloadType: "partial" }]);
     });
 
     it("subscribes to underlying topics even when user script has a compilation error", async () => {
@@ -620,7 +730,7 @@ describe("UserNodePlayer", () => {
         {
           topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
           receiveTime: upstreamFirst.receiveTime,
-          message: { custom_np_field: "abc", value: "bar" },
+          message: { custom_np_field: "abc", value: "bar", stamp: expect.any(Number) },
           schemaName: "/studio_script/1",
           sizeInBytes: 0,
         },
@@ -630,6 +740,7 @@ describe("UserNodePlayer", () => {
     it("produces blocks for full subscriptions", async () => {
       const fakePlayer = new FakePlayer();
       const userNodePlayer = new UserNodePlayer(fakePlayer, defaultUserNodeActions);
+      const spy = jest.spyOn(UserNodePlayer, "CreateNodeRuntimeWorker");
 
       const [done] = setListenerHelper(userNodePlayer);
 
@@ -659,7 +770,18 @@ describe("UserNodePlayer", () => {
         },
       });
 
-      const { progress } = (await done)!;
+      const { messages, progress } = (await done)!;
+
+      expect(messages).toEqual([
+        upstreamFirst,
+        {
+          topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
+          receiveTime: upstreamFirst.receiveTime,
+          message: { custom_np_field: "abc", value: "bar", stamp: expect.any(Number) },
+          schemaName: "/studio_script/1",
+          sizeInBytes: 0,
+        },
+      ]);
 
       expect(progress).toEqual({
         fullyLoadedFractionRanges: [{ start: 0, end: 1 }],
@@ -679,6 +801,7 @@ describe("UserNodePlayer", () => {
                     message: {
                       custom_np_field: "abc",
                       value: "bar",
+                      stamp: expect.any(Number),
                     },
                     schemaName: "/studio_script/1",
                     sizeInBytes: 0,
@@ -690,6 +813,20 @@ describe("UserNodePlayer", () => {
           ],
         },
       });
+
+      // CreateNodeRuntimeWorker should have been called once for the message processing
+      // worker and once for the block processing worker,
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      // The block and message workers should have different stamps.
+      const messageWorkerStamp = (messages[1] as MessageEvent<{ stamp: number }>).message.stamp;
+      const blockWorkerStamp = (
+        progress?.messageCache?.blocks[0]?.messagesByTopic[
+          `${DEFAULT_STUDIO_NODE_PREFIX}1`
+        ]?.[0] as MessageEvent<{ stamp: number }>
+      ).message.stamp;
+
+      expect(messageWorkerStamp).not.toEqual(blockWorkerStamp);
     });
 
     it("does not duplicate output messages in blocks after multiple readings", async () => {
@@ -764,6 +901,7 @@ describe("UserNodePlayer", () => {
                     message: {
                       custom_np_field: "abc",
                       value: "bar",
+                      stamp: expect.any(Number),
                     },
                     schemaName: "/studio_script/1",
                     sizeInBytes: 0,
@@ -785,6 +923,7 @@ describe("UserNodePlayer", () => {
                     message: {
                       custom_np_field: "abc",
                       value: "bar",
+                      stamp: expect.any(Number),
                     },
                     schemaName: "/studio_script/1",
                     sizeInBytes: 0,
@@ -1140,14 +1279,14 @@ describe("UserNodePlayer", () => {
         {
           topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
           receiveTime: upstreamFirst.receiveTime,
-          message: { custom_np_field: "abc", value: "bar" },
+          message: { custom_np_field: "abc", value: "bar", stamp: expect.any(Number) },
           schemaName: "/studio_script/1",
           sizeInBytes: 0,
         },
         {
           topic: `${DEFAULT_STUDIO_NODE_PREFIX}2`,
           receiveTime: upstreamFirst.receiveTime,
-          message: { custom_np_field: "abc", value: "bar" },
+          message: { custom_np_field: "abc", value: "bar", stamp: expect.any(Number) },
           schemaName: "/studio_script/2",
           sizeInBytes: 0,
         },
@@ -1340,7 +1479,7 @@ describe("UserNodePlayer", () => {
         [nodeId]: { name: `${DEFAULT_STUDIO_NODE_PREFIX}1`, sourceCode: nodeUserCode },
       });
 
-      const [firstDone, secondDone] = setListenerHelper(userNodePlayer, 2);
+      const [firstDone, secondDone, thirdDone] = setListenerHelper(userNodePlayer, 3);
 
       await fakePlayer.emit({
         activeData: {
@@ -1357,7 +1496,10 @@ describe("UserNodePlayer", () => {
       const { topicNames: firstTopicNames }: any = await firstDone;
       expect(firstTopicNames).toEqual(["/np_input", `${DEFAULT_STUDIO_NODE_PREFIX}1`]);
 
-      void userNodePlayer.setUserNodes({});
+      await userNodePlayer.setUserNodes({});
+      const { topicNames: secondTopicNames }: any = await secondDone;
+      expect(secondTopicNames).toEqual(["/np_input", `${DEFAULT_STUDIO_NODE_PREFIX}1`]);
+
       await fakePlayer.emit({
         activeData: {
           ...basicPlayerState,
@@ -1369,9 +1511,10 @@ describe("UserNodePlayer", () => {
           ),
         },
       });
-      const { topicNames: secondTopicNames }: any = await secondDone;
-      expect(secondTopicNames).toEqual(["/np_input"]);
+      const { topicNames: thirdTopicNames }: any = await thirdDone;
+      expect(thirdTopicNames).toEqual(["/np_input"]);
     });
+
     it("properly sets diagnostics when there is an error", async () => {
       const code = `
         export const inputs = ["/np_input_does_not_exist"];
@@ -1614,6 +1757,37 @@ describe("UserNodePlayer", () => {
           { name: `${DEFAULT_STUDIO_NODE_PREFIX}state`, schemaName: "std_msgs/Header" },
         ]);
       });
+      it("does not override dynamically generated datatypes with built-in datatypes", async () => {
+        const fakePlayer = new FakePlayer();
+        const userNodePlayer = new UserNodePlayer(fakePlayer, defaultUserNodeActions);
+        void userNodePlayer.setUserNodes({
+          nodeId: { name: `${DEFAULT_STUDIO_NODE_PREFIX}1`, sourceCode: nodeUserCode },
+        });
+
+        const [done] = setListenerHelper(userNodePlayer);
+        await fakePlayer.emit({
+          activeData: {
+            ...basicPlayerState,
+            // Emit datatypes which includes the built-in type `std_msgs/Header`.
+            datatypes: new Map(
+              Object.entries({
+                "std_msgs/Header": {
+                  definitions: [
+                    { type: "string", name: "some_field", isArray: false, isComplex: false },
+                  ],
+                },
+              }),
+            ),
+          },
+        });
+
+        // We expect that the player's emitted `std_msgs/Header` datatype was not overriden by the
+        // built-in type.
+        const { datatypes } = (await done)!;
+        expect(datatypes?.get("std_msgs/Header")).toEqual({
+          definitions: [{ type: "string", name: "some_field", isArray: false, isComplex: false }],
+        });
+      });
     });
 
     describe("global variable behavior", () => {
@@ -1653,57 +1827,6 @@ describe("UserNodePlayer", () => {
         ]);
 
         userNodePlayer.setGlobalVariables({ globalValue: "bbb" });
-        await fakePlayer.emit({ activeData });
-
-        const { messages: messages2 } = (await done2)!;
-        expect(messages2).toEqual([
-          upstreamFirst,
-          {
-            topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
-            receiveTime: upstreamFirst.receiveTime,
-            message: { custom_np_field: "bbb", value: "bbb" },
-            schemaName: "/studio_script/1",
-            sizeInBytes: 0,
-          },
-        ]);
-      });
-      it("should re-compute message after global variable change with no new messages in active data", async () => {
-        const fakePlayer = new FakePlayer();
-        const userNodePlayer = new UserNodePlayer(fakePlayer, defaultUserNodeActions);
-        const [done, done2] = setListenerHelper(userNodePlayer, 2);
-
-        userNodePlayer.setGlobalVariables({ globalValue: "aaa" });
-        userNodePlayer.setSubscriptions([{ topic: `${DEFAULT_STUDIO_NODE_PREFIX}1` }]);
-        await userNodePlayer.setUserNodes({
-          [nodeId]: {
-            name: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
-            sourceCode: nodeUserCodeWithGlobalVars,
-          },
-        });
-
-        const activeData: PlayerStateActiveData = {
-          ...basicPlayerState,
-          messages: [upstreamFirst],
-          currentTime: upstreamFirst.receiveTime,
-          topics: [{ name: "/np_input", schemaName: "std_msgs/Header" }],
-          datatypes: new Map(Object.entries({ foo: { definitions: [] } })),
-        };
-        await fakePlayer.emit({ activeData });
-
-        const { messages } = (await done)!;
-        expect(messages).toEqual([
-          upstreamFirst,
-          {
-            topic: `${DEFAULT_STUDIO_NODE_PREFIX}1`,
-            receiveTime: upstreamFirst.receiveTime,
-            message: { custom_np_field: "aaa", value: "aaa" },
-            schemaName: "/studio_script/1",
-            sizeInBytes: 0,
-          },
-        ]);
-
-        userNodePlayer.setGlobalVariables({ globalValue: "bbb" });
-        activeData.messages = [];
         await fakePlayer.emit({ activeData });
 
         const { messages: messages2 } = (await done2)!;

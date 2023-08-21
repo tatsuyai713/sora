@@ -11,7 +11,8 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import { StoryObj } from "@storybook/react";
+import { Meta, StoryObj } from "@storybook/react";
+import { screen, userEvent } from "@storybook/testing-library";
 
 import MockMessagePipelineProvider from "@foxglove/studio-base/components/MessagePipeline/MockMessagePipelineProvider";
 import PlaybackSpeedControls from "@foxglove/studio-base/components/PlaybackSpeedControls";
@@ -19,83 +20,46 @@ import MockCurrentLayoutProvider from "@foxglove/studio-base/providers/CurrentLa
 
 const CAPABILITIES = ["setSpeed", "playbackControl"];
 
-function ControlsStory() {
-  return (
-    <div
-      style={{ padding: 20, paddingTop: 300 }}
-      ref={(el) => {
-        setImmediate(() => {
-          if (el) {
-            (el as any).querySelector("[data-testid=PlaybackSpeedControls-Dropdown]").click();
-          }
-        });
-      }}
-    >
-      <PlaybackSpeedControls />
-    </div>
-  );
-}
-
 export default {
   title: "components/PlaybackSpeedControls",
-};
-
-export const WithoutSpeedCapability: StoryObj = {
-  render: () => {
-    return (
+  component: PlaybackSpeedControls,
+  parameters: { colorScheme: "dark" },
+  decorators: [
+    (WrappedStory, { args }) => (
       <MockCurrentLayoutProvider>
-        <MockMessagePipelineProvider>
-          <ControlsStory />
+        <MockMessagePipelineProvider {...args}>
+          <div style={{ padding: 20, paddingTop: 300 }}>
+            <WrappedStory />
+          </div>
         </MockMessagePipelineProvider>
       </MockCurrentLayoutProvider>
-    );
+    ),
+  ],
+  play: async () => {
+    const el = await screen.findByTestId<HTMLInputElement>("PlaybackSpeedControls-Dropdown");
+    if (!el.disabled) {
+      await userEvent.click(el);
+    }
   },
+} satisfies Meta<typeof MockMessagePipelineProvider>;
 
+type Story = StoryObj<typeof MockMessagePipelineProvider>;
+
+export const WithoutSpeedCapability: Story = {
   name: "without speed capability",
-  parameters: { colorScheme: "dark" },
 };
 
-export const WithoutASpeedFromThePlayer: StoryObj = {
-  render: () => {
-    return (
-      <MockCurrentLayoutProvider>
-        <MockMessagePipelineProvider capabilities={CAPABILITIES} activeData={{ speed: undefined }}>
-          <ControlsStory />
-        </MockMessagePipelineProvider>
-      </MockCurrentLayoutProvider>
-    );
-  },
-
+export const WithoutASpeedFromThePlayer: Story = {
   name: "without a speed from the player",
-  parameters: { colorScheme: "dark" },
+  args: { capabilities: CAPABILITIES, activeData: { speed: undefined } },
 };
 
-export const WithASpeed: StoryObj = {
-  render: () => {
-    return (
-      <MockCurrentLayoutProvider>
-        <MockMessagePipelineProvider capabilities={CAPABILITIES}>
-          <ControlsStory />
-        </MockMessagePipelineProvider>
-      </MockCurrentLayoutProvider>
-    );
-  },
-
+export const WithASpeed: Story = {
   name: "with a speed",
-  parameters: { colorScheme: "dark" },
+  args: { capabilities: CAPABILITIES },
 };
 
-export const WithAVerySmallSpeed: StoryObj = {
-  render: () => {
-    return (
-      <MockCurrentLayoutProvider>
-        <MockMessagePipelineProvider capabilities={CAPABILITIES} activeData={{ speed: 0.01 }}>
-          <ControlsStory />
-        </MockMessagePipelineProvider>
-      </MockCurrentLayoutProvider>
-    );
-  },
-
+export const WithAVerySmallSpeed: Story = {
   name: "with a very small speed",
-  parameters: { colorScheme: "dark" },
+  args: { capabilities: CAPABILITIES, activeData: { speed: 0.01 } },
 };

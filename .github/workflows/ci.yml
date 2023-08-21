@@ -22,7 +22,6 @@ jobs:
             command: |
               # lint steps
               set -x
-              yarn constraints
               yarn license-check
               yarn dedupe --check
               yarn run tsc --noEmit # typecheck files that are not included by webpack or package builds
@@ -100,11 +99,11 @@ jobs:
       - uses: chromaui/action@v1
         if: ${{ github.event.repository.full_name == 'foxglove/studio' }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           projectToken: f50040a29fb8
           storybookBuildDir: storybook-static
           autoAcceptChanges: main
           exitOnceUploaded: true
+          onlyChanged: true
 
   integration:
     runs-on: ${{ matrix.os }}

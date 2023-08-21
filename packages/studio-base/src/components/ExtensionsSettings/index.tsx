@@ -3,20 +3,22 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import {
+  Alert,
+  AlertTitle,
   Button,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
   Typography,
-  styled as muiStyled,
 } from "@mui/material";
 import { differenceWith, groupBy, isEmpty, keyBy } from "lodash";
 import { useEffect, useMemo, useState } from "react";
 import { useAsyncFn } from "react-use";
-import { DeepReadonly } from "ts-essentials";
+import { makeStyles } from "tss-react/mui";
 
 import Log from "@foxglove/log";
+import { Immutable } from "@foxglove/studio";
 import { ExtensionDetails } from "@foxglove/studio-base/components/ExtensionDetails";
 import Stack from "@foxglove/studio-base/components/Stack";
 import { useExtensionCatalog } from "@foxglove/studio-base/context/ExtensionCatalogContext";
@@ -27,9 +29,9 @@ import {
 
 const log = Log.getLogger(__filename);
 
-const StyledListItemButton = muiStyled(ListItemButton)(({ theme }) => ({
-  "&:hover": {
-    color: theme.palette.primary.main,
+const useStyles = makeStyles()((theme) => ({
+  listItemButton: {
+    "&:hover": { color: theme.palette.primary.main },
   },
 }));
 
@@ -43,16 +45,17 @@ function displayNameForNamespace(namespace: string): string {
 }
 
 function ExtensionListEntry(props: {
-  entry: DeepReadonly<ExtensionMarketplaceDetail>;
+  entry: Immutable<ExtensionMarketplaceDetail>;
   onClick: () => void;
 }): JSX.Element {
   const {
     entry: { id, description, name, publisher, version },
     onClick,
   } = props;
+  const { classes } = useStyles();
   return (
     <ListItem disablePadding key={id}>
-      <StyledListItemButton onClick={onClick}>
+      <ListItemButton className={classes.listItemButton} onClick={onClick}>
         <ListItemText
           disableTypography
           primary={
@@ -76,7 +79,7 @@ function ExtensionListEntry(props: {
             </Stack>
           }
         />
-      </StyledListItemButton>
+      </ListItemButton>
     </ListItem>
   );
 }
@@ -85,7 +88,7 @@ export default function ExtensionsSettings(): React.ReactElement {
   const [focusedExtension, setFocusedExtension] = useState<
     | {
         installed: boolean;
-        entry: DeepReadonly<ExtensionMarketplaceDetail>;
+        entry: Immutable<ExtensionMarketplaceDetail>;
       }
     | undefined
   >(undefined);
@@ -158,22 +161,21 @@ export default function ExtensionsSettings(): React.ReactElement {
     );
   }
 
-  if (marketplaceEntries.error) {
-    return (
-      <Stack gap={1} alignItems="center" justifyContent="center" fullHeight>
-        <Typography align="center" variant="body2" color="text.secondary">
-          Failed to fetch the list of available extensions. Check your Internet connection and try
-          again.
-        </Typography>
-        <Button onClick={async () => await refreshMarketplaceEntries()}>
-          Retry Fetching Extensions
-        </Button>
-      </Stack>
-    );
-  }
-
   return (
     <Stack gap={1}>
+      {marketplaceEntries.error && (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" onClick={async () => await refreshMarketplaceEntries()}>
+              Retry
+            </Button>
+          }
+        >
+          <AlertTitle>Failed to retrieve the list of available marketplace extensions</AlertTitle>
+          Check your internet connection and try again.
+        </Alert>
+      )}
       {!isEmpty(namespacedEntries) ? (
         Object.entries(namespacedEntries).map(([namespace, entries]) => (
           <List key={namespace}>

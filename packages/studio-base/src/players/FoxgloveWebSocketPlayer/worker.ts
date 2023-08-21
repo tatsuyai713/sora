@@ -15,9 +15,9 @@ export type FromWorkerMessage =
 
 let ws: WebSocket | undefined = undefined;
 
-const send = (msg: FromWorkerMessage): void => {
-  self.postMessage(msg);
-};
+const send: (message: FromWorkerMessage) => void = self.postMessage;
+const sendWithTransfer: (message: FromWorkerMessage, transfer: Transferable[]) => void =
+  self.postMessage;
 
 self.onmessage = (event: MessageEvent<ToWorkerMessage>) => {
   const { type, data } = event.data;
@@ -41,11 +41,21 @@ self.onmessage = (event: MessageEvent<ToWorkerMessage>) => {
         ws.onclose = (wsEvent) => {
           send({ type: "close", data: JSON.parse(JSON.stringify(wsEvent) ?? "{}") });
         };
-        ws.onmessage = (wsEvent: MessageEvent<unknown>) => {
-          send({
-            type: "message",
-            data: wsEvent.data,
-          });
+        ws.onmessage = (wsEvent: MessageEvent) => {
+          if (wsEvent.data instanceof ArrayBuffer) {
+            sendWithTransfer(
+              {
+                type: "message",
+                data: wsEvent.data,
+              },
+              [wsEvent.data],
+            );
+          } else {
+            send({
+              type: "message",
+              data: wsEvent.data,
+            });
+          }
         };
       } catch (err) {
         // try-catch is needed to catch `Mixed Content` errors in Chrome, where the client

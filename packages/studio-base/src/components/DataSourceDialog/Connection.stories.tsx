@@ -7,25 +7,34 @@ import { StoryFn, StoryObj } from "@storybook/react";
 import PlayerSelectionContext, {
   PlayerSelection,
 } from "@foxglove/studio-base/context/PlayerSelectionContext";
+import MockCurrentLayoutProvider from "@foxglove/studio-base/providers/CurrentLayoutProvider/MockCurrentLayoutProvider";
 import WorkspaceContextProvider from "@foxglove/studio-base/providers/WorkspaceContextProvider";
 
 import { DataSourceDialog } from "./DataSourceDialog";
 
 const Wrapper = (Story: StoryFn): JSX.Element => {
   return (
-    <WorkspaceContextProvider
-      initialState={{
-        dataSourceDialog: {
-          activeDataSource: undefined,
-          item: "connection",
-          open: true,
-        },
-      }}
-    >
-      <PlayerSelectionContext.Provider value={playerSelection}>
-        <Story />
-      </PlayerSelectionContext.Provider>
-    </WorkspaceContextProvider>
+    <MockCurrentLayoutProvider>
+      <WorkspaceContextProvider
+        initialState={{
+          dialogs: {
+            dataSource: {
+              activeDataSource: undefined,
+              item: "connection",
+              open: true,
+            },
+            preferences: {
+              initialTab: undefined,
+              open: false,
+            },
+          },
+        }}
+      >
+        <PlayerSelectionContext.Provider value={playerSelection}>
+          <Story />
+        </PlayerSelectionContext.Provider>
+      </WorkspaceContextProvider>
+    </MockCurrentLayoutProvider>
   );
 };
 
@@ -91,6 +100,12 @@ export const LightChinese: StoryObj = {
   ...Light,
   name: "Default Chinese",
   parameters: { forceLanguage: "zh", colorScheme: "light" },
+};
+
+export const LightJapanese: StoryObj = {
+  ...Light,
+  name: "Default Japanese",
+  parameters: { forceLanguage: "ja", colorScheme: "light" },
 };
 
 export const Dark: StoryObj = {

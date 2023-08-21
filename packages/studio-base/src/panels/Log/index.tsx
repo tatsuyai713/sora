@@ -11,7 +11,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import produce from "immer";
+import { produce } from "immer";
 import { set } from "lodash";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,6 +40,7 @@ const SUPPORTED_DATATYPES = [
   "foxglove_msgs/Log",
   "foxglove_msgs/msg/Log",
   "foxglove.Log",
+  "foxglove::Log",
   "rcl_interfaces/msg/Log",
   "ros.rcl_interfaces.Log",
   "ros.rosgraph_msgs.Log",

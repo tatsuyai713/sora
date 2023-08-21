@@ -3,15 +3,22 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import EventEmitter from "eventemitter3";
-import { Immutable } from "immer";
 import * as THREE from "three";
 
-import { MessageEvent, ParameterValue, SettingsIcon, Topic, VariableValue } from "@foxglove/studio";
+import {
+  Immutable,
+  MessageEvent,
+  ParameterValue,
+  SettingsIcon,
+  Topic,
+  VariableValue,
+} from "@foxglove/studio";
+import { BuiltinPanelExtensionContext } from "@foxglove/studio-base/components/PanelExtensionAdapter";
 import { ICameraHandler } from "@foxglove/studio-base/panels/ThreeDeeRender/renderables/ICameraHandler";
 import { LabelPool } from "@foxglove/three-text";
 
 import { Input } from "./Input";
-import { ModelCache, MeshUpAxis } from "./ModelCache";
+import { MeshUpAxis, ModelCache } from "./ModelCache";
 import { PickedRenderable } from "./Picker";
 import { SceneExtension } from "./SceneExtension";
 import { SettingsManager } from "./SettingsManager";
@@ -19,8 +26,10 @@ import { SharedGeometry } from "./SharedGeometry";
 import { CameraState } from "./camera";
 import { DetailLevel } from "./lod";
 import { LayerSettingsTransform } from "./renderables/FrameAxes";
+import { DownloadImageInfo } from "./renderables/Images/ImageTypes";
 import { MeasurementTool } from "./renderables/MeasurementTool";
 import { PublishClickTool, PublishClickType } from "./renderables/PublishClickTool";
+import { ColorModeSettings } from "./renderables/colorMode";
 import { MarkerPool } from "./renderables/markers/MarkerPool";
 import { Quaternion, Vector3 } from "./ros";
 import { BaseSettings, CustomLayerSettings, SelectEntry } from "./settings";
@@ -41,15 +50,15 @@ export type RendererEvents = {
     parameters: ReadonlyMap<string, ParameterValue> | undefined,
     renderer: IRenderer,
   ) => void;
-  variablesChange: (
-    variables: ReadonlyMap<string, VariableValue> | undefined,
-    renderer: IRenderer,
-  ) => void;
+  /** Fired when the structure of the transform tree changes ie: new frame added/removed or frame assigned new parent */
   transformTreeUpdated: (renderer: IRenderer) => void;
   settingsTreeChange: (renderer: IRenderer) => void;
   configChange: (renderer: IRenderer) => void;
   schemaHandlersChanged: (renderer: IRenderer) => void;
   topicHandlersChanged: (renderer: IRenderer) => void;
+  topicsChanged: (renderer: IRenderer) => void;
+  resetViewChanged: (renderer: IRenderer) => void;
+  resetAllFramesCursor: (renderer: IRenderer) => void;
 };
 
 export type FollowMode = "follow-pose" | "follow-position" | "follow-none";
@@ -57,20 +66,24 @@ export type FollowMode = "follow-pose" | "follow-position" | "follow-none";
 export type ImageAnnotationSettings = {
   visible: boolean;
 };
-export type ImageAnnotationSubscription = {
-  topic: string;
-  schemaName: string;
-  settings: ImageAnnotationSettings;
-};
 
 /** Settings pertaining to Image mode */
-export type ImageModeConfig = {
+export type ImageModeConfig = Partial<ColorModeSettings> & {
   /** Image topic to display */
   imageTopic?: string;
   /** Topic containing CameraCalibration or CameraInfo */
   calibrationTopic?: string;
-  /** Annotation topic settings, analogous to {@link RendererConfig.topics} */
-  annotations?: ImageAnnotationSubscription[];
+  /** Annotation topicName -> settings, analogous to {@link RendererConfig.topics} */
+  annotations?: Record<string, Partial<ImageAnnotationSettings> | undefined>;
+  synchronize?: boolean;
+  /** Rotation */
+  rotation?: 0 | 90 | 180 | 270;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+  /** Minimum (black) value for single-channel images */
+  minValue?: number;
+  /** Maximum (white) value for single-channel images */
+  maxValue?: number;
 };
 
 export type RendererConfig = {
@@ -138,9 +151,6 @@ export type RendererConfig = {
   imageMode: ImageModeConfig;
 };
 
-/** Callback for handling a message received on a topic */
-export type MessageHandler<T = unknown> = (messageEvent: MessageEvent<T>) => void;
-
 export type RendererSubscription<T = unknown> = {
   /** Preload the full history of topic messages as a best effort */
   preload?: boolean;
@@ -153,8 +163,25 @@ export type RendererSubscription<T = unknown> = {
    */
   shouldSubscribe?: (topic: string) => boolean;
   /** Callback that will be fired for each matching incoming message */
-  handler: MessageHandler<T>;
+  handler: (messageEvent: MessageEvent<T>) => void;
 };
+
+export type AnyRendererSubscription = Immutable<
+  | {
+      type: "schema";
+      schemaNames: Set<string>;
+      // any is used here to allow storing heterogeneous arrays of subscriptions
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      subscription: RendererSubscription<any>;
+    }
+  | {
+      type: "topic";
+      topicName: string;
+      // any is used here to allow storing heterogeneous arrays of subscriptions
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      subscription: RendererSubscription<any>;
+    }
+>;
 
 export class InstancedLineMaterial extends THREE.LineBasicMaterial {
   public constructor(...args: ConstructorParameters<typeof THREE.LineBasicMaterial>) {
@@ -205,9 +232,12 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
   transformTree: TransformTree;
   coordinateFrameList: SelectEntry[];
   currentTime: bigint;
+  /** Coordinate frame that transforms are applied through to the follow frame. Should be unchanging. */
   fixedFrameId: string | undefined;
-  renderFrameId: string | undefined;
-  followFrameId: string | undefined;
+  /**
+   * The frameId that we _want_ to follow and render in if it exists.
+   */
+  readonly followFrameId: string | undefined;
 
   labelPool: LabelPool;
   markerPool: MarkerPool;
@@ -249,19 +279,9 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
    * @param allFrames - array of all preloaded messages
    * @returns {boolean} - whether the allFramesCursor has been updated and new messages were read in
    */
-  handleAllFramesMessages(allFrames?: readonly MessageEvent<unknown>[]): boolean;
+  handleAllFramesMessages(allFrames?: readonly MessageEvent[]): boolean;
 
   updateConfig(updateHandler: (draft: RendererConfig) => void): void;
-
-  addSchemaSubscriptions<T>(
-    schemaNames: Iterable<string>,
-    subscription: RendererSubscription<T> | MessageHandler<T>,
-  ): void;
-
-  addTopicSubscription<T>(
-    topic: string,
-    subscription: RendererSubscription<T> | MessageHandler<T>,
-  ): void;
 
   addCustomLayerAction(options: {
     layerId: string;
@@ -280,9 +300,7 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
    * of the topics list changes */
   setTopics(topics: ReadonlyArray<Topic> | undefined): void;
 
-  setParameters(parameters: ReadonlyMap<string, ParameterValue> | undefined): void;
-
-  setVariables(variables: ReadonlyMap<string, VariableValue>): void;
+  setParameters(parameters: Immutable<Map<string, ParameterValue>> | undefined): void;
 
   updateCustomLayersCount(): void;
 
@@ -290,9 +308,20 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
 
   getCameraState(): CameraState | undefined;
 
+  /** Whether the view has been modified and a reset button should be shown (image mode only). */
+  canResetView(): boolean;
+  /** Reset any manual view modifications (image mode only). */
+  resetView(): void;
+
+  /** Return the currently displayed image (image mode only). */
+  getCurrentImage(): DownloadImageInfo | undefined;
+
   setSelectedRenderable(selection: PickedRenderable | undefined): void;
 
-  addMessageEvent(messageEvent: Readonly<MessageEvent<unknown>>): void;
+  addMessageEvent(messageEvent: Readonly<MessageEvent>): void;
+
+  /**  Set desired render/display frame, will render using fallback if id is undefined or frame does not exist */
+  setFollowFrameId(frameId: string | undefined): void;
 
   /** Match the behavior of `tf::Transformer` by stripping leading slashes from
    * frame_ids. This preserves compatibility with earlier versions of ROS while
@@ -319,4 +348,7 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
   // Callback handlers
   animationFrame: () => void;
   queueAnimationFrame: () => void;
+
+  // Function to fetch an asset from Studio's asset manager.
+  fetchAsset: BuiltinPanelExtensionContext["unstable_fetchAsset"];
 }

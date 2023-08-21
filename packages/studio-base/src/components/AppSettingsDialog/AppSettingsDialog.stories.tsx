@@ -90,18 +90,24 @@ export const DefaultChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const DefaultJapanese: StoryObj = {
+  ...Default,
+  parameters: { forceLanguage: "ja" },
+};
+
 export const ChangingLanguage: StoryObj = {
   render: function Story() {
     return <AppSettingsDialog open />;
   },
 
   play: async () => {
+    const { click, keyboard } = userEvent.setup();
     const input = await screen.findByText("English", { exact: false });
-    userEvent.click(input);
+    await click(input);
 
-    userEvent.keyboard("中文");
+    await keyboard("中文");
     const item = await screen.findByText("中文", { exact: false });
-    userEvent.click(item);
+    await click(item);
   },
 };
 
@@ -116,6 +122,11 @@ export const GeneralChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const GeneralJapanese: StoryObj = {
+  ...General,
+  parameters: { forceLanguage: "ja" },
+};
+
 export const Privacy: StoryObj = {
   render: () => {
     return <AppSettingsDialog open activeTab="privacy" />;
@@ -125,6 +136,11 @@ export const Privacy: StoryObj = {
 export const PrivacyChinese: StoryObj = {
   ...Privacy,
   parameters: { forceLanguage: "zh" },
+};
+
+export const PrivacyJapanese: StoryObj = {
+  ...Privacy,
+  parameters: { forceLanguage: "ja" },
 };
 
 export const Extensions: StoryObj = {
@@ -138,6 +154,11 @@ export const ExtensionsChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const ExtensionsJapanese: StoryObj = {
+  ...Extensions,
+  parameters: { forceLanguage: "ja" },
+};
+
 export const Experimental: StoryObj = {
   render: () => {
     return <AppSettingsDialog open activeTab="experimental-features" />;
@@ -149,6 +170,11 @@ export const ExperimentalChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const ExperimentalJapanese: StoryObj = {
+  ...Experimental,
+  parameters: { forceLanguage: "ja" },
+};
+
 export const About: StoryObj = {
   render: () => {
     return <AppSettingsDialog open activeTab="about" />;
@@ -158,4 +184,9 @@ export const About: StoryObj = {
 export const AboutChinese: StoryObj = {
   ...About,
   parameters: { forceLanguage: "zh" },
+};
+
+export const AboutJapanese: StoryObj = {
+  ...About,
+  parameters: { forceLanguage: "ja" },
 };

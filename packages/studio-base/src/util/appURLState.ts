@@ -5,13 +5,10 @@
 import { isEmpty, omitBy } from "lodash";
 
 import { fromRFC3339String, toRFC3339String, Time } from "@foxglove/rostime";
-import { LayoutID } from "@foxglove/studio-base/index";
 
 export type AppURLState = {
   ds?: string;
   dsParams?: Record<string, string>;
-  layoutId?: LayoutID;
-  layoutUrl?: string;
   time?: Time;
 };
 
@@ -24,22 +21,6 @@ export type AppURLState = {
  */
 export function updateAppURLState(url: URL, urlState: AppURLState): URL {
   const newURL = new URL(url.href);
-
-  if ("layoutId" in urlState) {
-    if (urlState.layoutId) {
-      newURL.searchParams.set("layoutId", urlState.layoutId);
-    } else {
-      newURL.searchParams.delete("layoutId");
-    }
-  }
-
-  if ("layoutUrl" in urlState) {
-    if (urlState.layoutUrl) {
-      newURL.searchParams.set("layoutUrl", urlState.layoutUrl);
-    } else {
-      newURL.searchParams.delete("layoutUrl");
-    }
-  }
 
   if ("time" in urlState) {
     if (urlState.time) {
@@ -83,8 +64,6 @@ export function updateAppURLState(url: URL, urlState: AppURLState): URL {
  */
 export function parseAppURLState(url: URL): AppURLState | undefined {
   const ds = url.searchParams.get("ds") ?? undefined;
-  const layoutId = url.searchParams.get("layoutId");
-  const layoutUrl = url.searchParams.get("layoutUrl");
   const timeString = url.searchParams.get("time");
   const time = timeString == undefined ? undefined : fromRFC3339String(timeString);
   const dsParams: Record<string, string> = {};
@@ -97,8 +76,6 @@ export function parseAppURLState(url: URL): AppURLState | undefined {
 
   const state: AppURLState = omitBy(
     {
-      layoutId: layoutId ? (layoutId as LayoutID) : undefined,
-      layoutUrl: layoutUrl ? layoutUrl : undefined,
       time,
       ds,
       dsParams: isEmpty(dsParams) ? undefined : dsParams,
@@ -107,19 +84,4 @@ export function parseAppURLState(url: URL): AppURLState | undefined {
   );
 
   return isEmpty(state) ? undefined : state;
-}
-
-/**
- * Tries to parse app url state from the window's current location.
- */
-export function windowAppURLState(): AppURLState | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  try {
-    return parseAppURLState(new URL(window.location.href));
-  } catch {
-    return undefined;
-  }
 }

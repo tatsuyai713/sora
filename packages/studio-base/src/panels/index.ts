@@ -8,7 +8,7 @@ import { TAB_PANEL_TYPE } from "@foxglove/studio-base/util/globalConstants";
 
 import dataSourceInfoThumbnail from "./DataSourceInfo/thumbnail.png";
 import gaugeThumbnail from "./Gauge/thumbnail.png";
-import imageViewThumbnail from "./Image/thumbnail.png";
+import imageThumbnail from "./Image/thumbnail.png";
 import indicatorThumbnail from "./Indicator/thumbnail.png";
 import logThumbnail from "./Log/thumbnail.png";
 import mapThumbnail from "./Map/thumbnail.png";
@@ -33,8 +33,7 @@ export const getBuiltin: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
     type: "3D",
     description: t("3DPanelDescription"),
     thumbnail: threeDeeRenderThumbnail,
-    module: async () => ({ default: (await import("./ThreeDeeRender")).ThreeDeePanel }),
-    settingsOnboardingTooltip: t("3DPanelSettingsOnboardingTooltip"),
+    module: async () => await import("./ThreeDeeRender"),
   },
   {
     title: t("ROSDiagnosticsDetail"),
@@ -54,9 +53,9 @@ export const getBuiltin: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
   },
   {
     title: t("image"),
-    type: "ImageViewPanel",
+    type: "Image",
     description: t("imageDescription"),
-    thumbnail: imageViewThumbnail,
+    thumbnail: imageThumbnail,
     module: async () => await import("./Image"),
   },
   {
@@ -185,9 +184,3 @@ export const getDebug: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
     module: async () => await import("./PlaybackPerformance"),
   },
 ];
-
-export const getNewImage: (t: TFunction<"panels">) => PanelInfo = (t) => ({
-  title: t("newImage"),
-  type: "Image",
-  module: async () => ({ default: (await import("./ThreeDeeRender")).ImagePanel }),
-});

@@ -34,29 +34,30 @@ type Options = { size: number; stream: ReadableStream<Uint8Array> };
 
 /** Only efficient for small files */
 export class McapUnindexedIterableSource implements IIterableSource {
-  private options: Options;
-  private msgEventsByChannel?: Map<number, MessageEvent<unknown>[]>;
-  private start?: Time;
-  private end?: Time;
+  #options: Options;
+  #msgEventsByChannel?: Map<number, MessageEvent[]>;
+  #start?: Time;
+  #end?: Time;
 
   public constructor(options: Options) {
-    this.options = options;
+    this.#options = options;
   }
 
   public async initialize(): Promise<Initalization> {
-    if (this.options.size > 1024 * 1024 * 1024) {
+    if (this.#options.size > 1024 * 1024 * 1024) {
       // This provider uses a simple approach of loading everything into memory up front, so we
       // can't handle large files
-      throw new Error("Unable to stream MCAP file; too large");
+      throw new Error("Unable to open unindexed MCAP file; unindexed files are limited to 1GB");
     }
     const decompressHandlers = await loadDecompressHandlers();
 
-    const streamReader = this.options.stream.getReader();
+    const streamReader = this.#options.stream.getReader();
 
     const problems: PlayerProblem[] = [];
     const channelIdsWithErrors = new Set<number>();
 
-    const messagesByChannel = new Map<number, MessageEvent<unknown>[]>();
+    let messageCount = 0;
+    const messagesByChannel = new Map<number, MessageEvent[]>();
     const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
     const channelInfoById = new Map<
       number,
@@ -134,6 +135,7 @@ export class McapUnindexedIterableSource implements IIterableSource {
             }
             throw new Error(`message for channel ${channelId} with no prior channel info`);
           }
+          ++messageCount;
           const receiveTime = fromNanoSec(record.logTime);
           if (!startTime || isLessThan(receiveTime, startTime)) {
             startTime = receiveTime;
@@ -163,7 +165,7 @@ export class McapUnindexedIterableSource implements IIterableSource {
       }
     }
 
-    this.msgEventsByChannel = messagesByChannel;
+    this.#msgEventsByChannel = messagesByChannel;
 
     const topics: Topic[] = [];
     const topicStats = new Map<string, TopicStats>();
@@ -194,13 +196,13 @@ export class McapUnindexedIterableSource implements IIterableSource {
       }
     }
 
-    this.start = startTime ?? { sec: 0, nsec: 0 };
-    this.end = endTime ?? { sec: 0, nsec: 0 };
+    this.#start = startTime ?? { sec: 0, nsec: 0 };
+    this.#end = endTime ?? { sec: 0, nsec: 0 };
 
-    const fileDuration = toSec(subtract(this.end, this.start));
+    const fileDuration = toSec(subtract(this.#end, this.#start));
     if (fileDuration > DURATION_YEAR_SEC) {
-      const startRfc = toRFC3339String(this.start);
-      const endRfc = toRFC3339String(this.end);
+      const startRfc = toRFC3339String(this.#start);
+      const endRfc = toRFC3339String(this.#end);
 
       problems.push({
         message: "This file has an abnormally long duration.",
@@ -209,15 +211,22 @@ export class McapUnindexedIterableSource implements IIterableSource {
       });
     }
 
-    problems.push({
-      message: "This file is unindexed. Unindexed files may have degraded performance.",
-      tip: "See the mcap spec: https://mcap.dev/specification/index.html#summary-section",
-      severity: "warn",
-    });
+    if (messageCount === 0) {
+      problems.push({
+        message: "This file contains no messages.",
+        severity: "warn",
+      });
+    } else {
+      problems.push({
+        message: "This file is unindexed. Unindexed files may have degraded performance.",
+        tip: "See the MCAP spec: https://mcap.dev/specification/index.html#summary-section",
+        severity: "warn",
+      });
+    }
 
     return {
-      start: this.start,
-      end: this.end,
+      start: this.#start,
+      end: this.#end,
       topics,
       datatypes,
       profile,
@@ -230,26 +239,26 @@ export class McapUnindexedIterableSource implements IIterableSource {
   public async *messageIterator(
     args: MessageIteratorArgs,
   ): AsyncIterableIterator<Readonly<IteratorResult>> {
-    if (!this.msgEventsByChannel) {
+    if (!this.#msgEventsByChannel) {
       throw new Error("initialization not completed");
     }
 
     const topics = args.topics;
-    const start = args.start ?? this.start;
-    const end = args.end ?? this.end;
+    const start = args.start ?? this.#start;
+    const end = args.end ?? this.#end;
 
-    if (topics.length === 0 || !start || !end) {
+    if (topics.size === 0 || !start || !end) {
       return;
     }
 
-    const topicsSet = new Set(topics);
+    const topicsMap = new Map(topics);
     const resultMessages = [];
 
-    for (const [channelId, msgEvents] of this.msgEventsByChannel) {
+    for (const [channelId, msgEvents] of this.#msgEventsByChannel) {
       for (const msgEvent of msgEvents) {
         if (
           isTimeInRangeInclusive(msgEvent.receiveTime, start, end) &&
-          topicsSet.has(msgEvent.topic)
+          topicsMap.has(msgEvent.topic)
         ) {
           resultMessages.push({
             type: "message-event" as const,
@@ -266,18 +275,16 @@ export class McapUnindexedIterableSource implements IIterableSource {
     yield* resultMessages;
   }
 
-  public async getBackfillMessages(
-    args: GetBackfillMessagesArgs,
-  ): Promise<MessageEvent<unknown>[]> {
-    if (!this.msgEventsByChannel) {
+  public async getBackfillMessages(args: GetBackfillMessagesArgs): Promise<MessageEvent[]> {
+    if (!this.#msgEventsByChannel) {
       throw new Error("initialization not completed");
     }
 
     const needTopics = args.topics;
-    const msgEventsByTopic = new Map<string, MessageEvent<unknown>>();
-    for (const [_, msgEvents] of this.msgEventsByChannel) {
+    const msgEventsByTopic = new Map<string, MessageEvent>();
+    for (const [_, msgEvents] of this.#msgEventsByChannel) {
       for (const msgEvent of msgEvents) {
-        if (compare(msgEvent.receiveTime, args.time) <= 0 && needTopics.includes(msgEvent.topic)) {
+        if (compare(msgEvent.receiveTime, args.time) <= 0 && needTopics.has(msgEvent.topic)) {
           msgEventsByTopic.set(msgEvent.topic, msgEvent);
         }
       }

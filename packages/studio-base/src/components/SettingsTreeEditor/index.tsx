@@ -2,23 +2,22 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import ClearIcon from "@mui/icons-material/Clear";
+import CancelIcon from "@mui/icons-material/Cancel";
 import SearchIcon from "@mui/icons-material/Search";
 import { IconButton, TextField } from "@mui/material";
 import memoizeWeak from "memoize-weak";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DeepReadonly } from "ts-essentials";
 import { makeStyles } from "tss-react/mui";
 
-import { SettingsTree, SettingsTreeAction, SettingsTreeField } from "@foxglove/studio";
+import { Immutable, SettingsTree, SettingsTreeAction, SettingsTreeField } from "@foxglove/studio";
 import { useConfigById } from "@foxglove/studio-base/PanelAPI";
 import { FieldEditor } from "@foxglove/studio-base/components/SettingsTreeEditor/FieldEditor";
 import Stack from "@foxglove/studio-base/components/Stack";
 import { useSelectedPanels } from "@foxglove/studio-base/context/CurrentLayoutContext";
 import { usePanelCatalog } from "@foxglove/studio-base/context/PanelCatalogContext";
 import { usePanelStateStore } from "@foxglove/studio-base/context/PanelStateContext";
-import { getPanelTypeFromId, PANEL_TITLE_CONFIG_KEY } from "@foxglove/studio-base/util/layout";
+import { PANEL_TITLE_CONFIG_KEY, getPanelTypeFromId } from "@foxglove/studio-base/util/layout";
 
 import { NodeEditor } from "./NodeEditor";
 import { filterTreeNodes, prepareSettingsNodes } from "./utils";
@@ -26,6 +25,7 @@ import { filterTreeNodes, prepareSettingsNodes } from "./utils";
 const useStyles = makeStyles()((theme) => ({
   appBar: {
     top: 0,
+    marginRight: 1,
     zIndex: theme.zIndex.appBar,
     padding: theme.spacing(0.5),
     position: "sticky",
@@ -49,9 +49,11 @@ const useStyles = makeStyles()((theme) => ({
 const makeStablePath = memoizeWeak((key: string) => [key]);
 
 export default function SettingsTreeEditor({
+  variant,
   settings,
 }: {
-  settings: DeepReadonly<SettingsTree>;
+  variant: "panel" | "log";
+  settings: Immutable<SettingsTree>;
 }): JSX.Element {
   const { classes } = useStyles();
   const { actionHandler, focusedPath } = settings;
@@ -115,14 +117,16 @@ export default function SettingsTreeEditor({
       {settings.enableFilter === true && (
         <header className={classes.appBar}>
           <TextField
-            id="settings-filter"
+            id={`${variant}-settings-filter`}
             variant="filled"
-            data-testid="settings-filter-field"
             onChange={(event) => setFilterText(event.target.value)}
             value={filterText}
             className={classes.textField}
             fullWidth
             placeholder={t("searchPanelSettings")}
+            inputProps={{
+              "data-testid": `${variant}-settings-filter-input`,
+            }}
             InputProps={{
               size: "small",
               startAdornment: (
@@ -137,7 +141,7 @@ export default function SettingsTreeEditor({
                   onClick={() => setFilterText("")}
                   edge="end"
                 >
-                  <ClearIcon fontSize="small" />
+                  <CancelIcon fontSize="small" />
                 </IconButton>
               ),
             }}

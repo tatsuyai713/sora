@@ -13,7 +13,7 @@ import { Axis, AXIS_LENGTH } from "./Axis";
 import { createArrowMarker } from "./Poses";
 import { RenderableArrow } from "./markers/RenderableArrow";
 import { RenderableLineStrip } from "./markers/RenderableLineStrip";
-import type { IRenderer } from "../IRenderer";
+import type { AnyRendererSubscription, IRenderer } from "../IRenderer";
 import { BaseUserData, Renderable } from "../Renderable";
 import { PartialMessage, PartialMessageEvent, SceneExtension } from "../SceneExtension";
 import { SettingsTreeEntry } from "../SettingsManager";
@@ -141,10 +141,26 @@ export class PoseArrayRenderable extends Renderable<PoseArrayUserData> {
 export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
   public constructor(renderer: IRenderer) {
     super("foxglove.PoseArrays", renderer);
+  }
 
-    renderer.addSchemaSubscriptions(POSE_ARRAY_DATATYPES, this.handlePoseArray);
-    renderer.addSchemaSubscriptions(POSES_IN_FRAME_DATATYPES, this.handlePosesInFrame);
-    renderer.addSchemaSubscriptions(NAV_PATH_DATATYPES, this.handleNavPath);
+  public override getSubscriptions(): readonly AnyRendererSubscription[] {
+    return [
+      {
+        type: "schema",
+        schemaNames: POSE_ARRAY_DATATYPES,
+        subscription: { handler: this.#handlePoseArray },
+      },
+      {
+        type: "schema",
+        schemaNames: POSES_IN_FRAME_DATATYPES,
+        subscription: { handler: this.#handlePosesInFrame },
+      },
+      {
+        type: "schema",
+        schemaNames: NAV_PATH_DATATYPES,
+        subscription: { handler: this.#handleNavPath },
+      },
+    ];
   }
 
   public override settingsNodes(): SettingsTreeEntry[] {
@@ -217,7 +233,7 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
         | Partial<LayerSettingsPoseArray>
         | undefined;
       const defaultType = { type: getDefaultType(this.renderer.topicsByName?.get(topicName)) };
-      this._updatePoseArrayRenderable(
+      this.#updatePoseArrayRenderable(
         renderable,
         renderable.userData.poseArrayMessage,
         renderable.userData.originalMessage,
@@ -227,29 +243,29 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
     }
   };
 
-  private handlePoseArray = (messageEvent: PartialMessageEvent<PoseArray>): void => {
+  #handlePoseArray = (messageEvent: PartialMessageEvent<PoseArray>): void => {
     const poseArrayMessage = normalizePoseArray(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
-    this.addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
+    this.#addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
   };
 
-  private handleNavPath = (messageEvent: PartialMessageEvent<NavPath>): void => {
+  #handleNavPath = (messageEvent: PartialMessageEvent<NavPath>): void => {
     if (!validateNavPath(messageEvent, this.renderer)) {
       return;
     }
 
     const poseArrayMessage = normalizeNavPathToPoseArray(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
-    this.addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
+    this.#addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
   };
 
-  private handlePosesInFrame = (messageEvent: PartialMessageEvent<PosesInFrame>): void => {
+  #handlePosesInFrame = (messageEvent: PartialMessageEvent<PosesInFrame>): void => {
     const poseArrayMessage = normalizePosesInFrameToPoseArray(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
-    this.addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
+    this.#addPoseArray(messageEvent.topic, poseArrayMessage, messageEvent.message, receiveTime);
   };
 
-  private addPoseArray(
+  #addPoseArray(
     topic: string,
     poseArrayMessage: PoseArray,
     originalMessage: Record<string, RosValue>,
@@ -282,7 +298,7 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
       this.renderables.set(topic, renderable);
     }
 
-    this._updatePoseArrayRenderable(
+    this.#updatePoseArrayRenderable(
       renderable,
       poseArrayMessage,
       originalMessage,
@@ -291,7 +307,7 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
     );
   }
 
-  private _createAxesToMatchPoses(
+  #createAxesToMatchPoses(
     renderable: PoseArrayRenderable,
     poseArray: PoseArray,
     topic: string,
@@ -323,7 +339,7 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
     }
   }
 
-  private _createArrowsToMatchPoses(
+  #createArrowsToMatchPoses(
     renderable: PoseArrayRenderable,
     poseArray: PoseArray,
     topic: string,
@@ -361,7 +377,7 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
     }
   }
 
-  private _updatePoseArrayRenderable(
+  #updatePoseArrayRenderable(
     renderable: PoseArrayRenderable,
     poseArrayMessage: PoseArray,
     originalMessage: Record<string, RosValue>,
@@ -430,13 +446,13 @@ export class PoseArrays extends SceneExtension<PoseArrayRenderable> {
     // Update the pose for each pose renderable
     switch (settings.type) {
       case "axis":
-        this._createAxesToMatchPoses(renderable, poseArrayMessage, topic);
+        this.#createAxesToMatchPoses(renderable, poseArrayMessage, topic);
         for (let i = 0; i < poseArrayMessage.poses.length; i++) {
           setObjectPose(renderable.userData.axes[i]!, poseArrayMessage.poses[i]!);
         }
         break;
       case "arrow":
-        this._createArrowsToMatchPoses(renderable, poseArrayMessage, topic, colorStart, colorEnd);
+        this.#createArrowsToMatchPoses(renderable, poseArrayMessage, topic, colorStart, colorEnd);
         for (let i = 0; i < poseArrayMessage.poses.length; i++) {
           setObjectPose(renderable.userData.arrows[i]!, poseArrayMessage.poses[i]!);
         }

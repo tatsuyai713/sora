@@ -43,13 +43,13 @@ type ParseAndStringifyFn = {
   stringify: (obj: unknown) => string;
   parse: (val: string) => unknown;
 };
-export type BaseProps = {
+type BaseProps = {
   dataTestId?: string;
   dataValidator?: (data: unknown) => ValidationResult | undefined;
   onChange?: OnChange;
   onError?: (err: string) => void;
   readOnly?: boolean;
-  maxHeight?: number;
+  maxHeight?: number | "auto" | "none";
   value: Value;
 };
 
@@ -203,8 +203,8 @@ export default function JsonInput(props: BaseProps): JSX.Element {
   }
 
   return (
-    <Stack style={{ maxHeight: 800 }} overflowY="auto">
-      <ValidatedInputBase parse={JSON.parse} stringify={stringify} {...props} />
+    <Stack>
+      <ValidatedInputBase parse={JSON.parse} stringify={stringify} {...props} maxHeight="none" />
     </Stack>
   );
 }

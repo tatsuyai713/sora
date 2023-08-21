@@ -12,23 +12,32 @@ import CurrentUserContext, {
 import PlayerSelectionContext, {
   PlayerSelection,
 } from "@foxglove/studio-base/context/PlayerSelectionContext";
+import MockCurrentLayoutProvider from "@foxglove/studio-base/providers/CurrentLayoutProvider/MockCurrentLayoutProvider";
 import WorkspaceContextProvider from "@foxglove/studio-base/providers/WorkspaceContextProvider";
 
 import { DataSourceDialog } from "./DataSourceDialog";
 
 const Wrapper = (Story: StoryFn): JSX.Element => {
   return (
-    <WorkspaceContextProvider
-      initialState={{
-        dataSourceDialog: {
-          activeDataSource: undefined,
-          item: "start",
-          open: true,
-        },
-      }}
-    >
-      <Story />
-    </WorkspaceContextProvider>
+    <MockCurrentLayoutProvider>
+      <WorkspaceContextProvider
+        initialState={{
+          dialogs: {
+            dataSource: {
+              activeDataSource: undefined,
+              item: "start",
+              open: true,
+            },
+            preferences: {
+              initialTab: undefined,
+              open: false,
+            },
+          },
+        }}
+      >
+        <Story />
+      </WorkspaceContextProvider>
+    </MockCurrentLayoutProvider>
   );
 };
 
@@ -153,6 +162,12 @@ export const UserNoAuthChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const UserNoAuthJapanese: StoryObj = {
+  ...UserNoAuth,
+  name: "User not authenticated Japanese",
+  parameters: { forceLanguage: "ja" },
+};
+
 export const UserPrivate: StoryObj = {
   render: () => {
     return (
@@ -170,6 +185,12 @@ export const UserPrivateChinese: StoryObj = {
   ...UserPrivate,
   name: "User not authenticated (private) Chinese",
   parameters: { forceLanguage: "zh" },
+};
+
+export const UserPrivateJapanese: StoryObj = {
+  ...UserPrivate,
+  name: "User not authenticated (private) Japanese",
+  parameters: { forceLanguage: "ja" },
 };
 
 export const UserAuthedFree: StoryObj = {
@@ -193,6 +214,12 @@ export const UserAuthedFreeChinese: StoryObj = {
   parameters: { forceLanguage: "zh" },
 };
 
+export const UserAuthedFreeJapanese: StoryObj = {
+  ...UserAuthedFree,
+  name: "User Authenticated with Free Account Japanese",
+  parameters: { forceLanguage: "ja" },
+};
+
 export const UserAuthedPaid: StoryObj = {
   render: () => {
     const freeUser = fakeUser("paid");
@@ -212,4 +239,10 @@ export const UserAuthedPaidChinese: StoryObj = {
   ...UserAuthedPaid,
   name: "User Authenticated with Paid Account Chinese",
   parameters: { forceLanguage: "zh" },
+};
+
+export const UserAuthedPaidJapanese: StoryObj = {
+  ...UserAuthedPaid,
+  name: "User Authenticated with Paid Account Japanese",
+  parameters: { forceLanguage: "ja" },
 };

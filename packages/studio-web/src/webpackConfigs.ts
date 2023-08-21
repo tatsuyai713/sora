@@ -11,6 +11,7 @@ import { Configuration, WebpackPluginInstance } from "webpack";
 import type { Configuration as WebpackDevServerConfiguration } from "webpack-dev-server";
 
 import type { WebpackArgv } from "@foxglove/studio-base/WebpackArgv";
+import * as palette from "@foxglove/studio-base/src/theme/palette";
 import { makeConfig } from "@foxglove/studio-base/webpack";
 
 export interface WebpackConfiguration extends Configuration {
@@ -115,9 +116,26 @@ export const mainConfig =
       <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
       <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
       <title>sviz</title>
+      <style type="text/css" id="loading-styles">
+        body {
+          margin: 0;
+        }
+        #root {
+          height: 100vh;
+          background-color: ${palette.light.background?.default};
+          color: ${palette.light.text?.primary};
+        }
+        @media (prefers-color-scheme: dark) {
+          #root {
+            background-color: ${palette.dark.background?.default}};
+            color: ${palette.dark.text?.primary};
+          }
+        }
+      </style>
     </head>
     <script>
       global = globalThis;
+      globalThis.FOXGLOVE_STUDIO_DEFAULT_LAYOUT = [/*FOXGLOVE_STUDIO_DEFAULT_LAYOUT_PLACEHOLDER*/][0];
     </script>
     <body>
       <div id="root"></div>

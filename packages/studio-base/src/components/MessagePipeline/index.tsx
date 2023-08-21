@@ -3,21 +3,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import { debounce } from "lodash";
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { StoreApi, useStore } from "zustand";
 
+import { useGuaranteedContext } from "@foxglove/hooks";
+import { Immutable } from "@foxglove/studio";
 import { AppSetting } from "@foxglove/studio-base/AppSetting";
 import { useAppConfigurationValue } from "@foxglove/studio-base/hooks/useAppConfigurationValue";
 import { GlobalVariables } from "@foxglove/studio-base/hooks/useGlobalVariables";
-import useGuaranteedContext from "@foxglove/studio-base/hooks/useGuaranteedContext";
 import {
   Player,
   PlayerProblem,
@@ -30,7 +23,6 @@ import { pauseFrameForPromises, FramePromise } from "./pauseFrameForPromise";
 import {
   MessagePipelineInternalState,
   createMessagePipelineStore,
-  MessagePipelineStateAction,
   defaultPlayerState,
 } from "./store";
 import { MessagePipelineContext } from "./types";
@@ -83,13 +75,17 @@ export function MessagePipelineProvider({
   globalVariables,
 }: ProviderProps): React.ReactElement {
   const promisesToWaitForRef = useRef<FramePromise[]>([]);
-  const [store] = useState(() =>
-    createMessagePipelineStore({ promisesToWaitForRef, initialPlayer: player }),
-  );
-  useEffect(() => {
-    store.getState().dispatch({ type: "set-player", player });
-    player?.setPublishers(store.getState().allPublishers);
-  }, [player, store]);
+
+  // We make a new store when the player changes. This throws away any state from the previous store
+  // and re-creates the pipeline functions and references. We make a new store to avoid holding onto
+  // any state from the previous store.
+  //
+  // Note: This throws away any publishers, subscribers, etc that panels may have registered. We
+  // are ok with this behavior because the <Workspace> re-mounts all panels when a player changes.
+  // The re-mounted panels will re-initialize and setup new publishers and subscribers.
+  const store = useMemo(() => {
+    return createMessagePipelineStore({ promisesToWaitForRef, initialPlayer: player });
+  }, [player]);
 
   const subscriptions = useStore(store, selectSubscriptions);
 
@@ -98,7 +94,7 @@ export function MessagePipelineProvider({
   //
   // The delay of 0ms is intentional as we only want to give one timeout cycle to batch updates
   const debouncedPlayerSetSubscriptions = useMemo(() => {
-    return debounce((subs: SubscribePayload[]) => {
+    return debounce((subs: Immutable<SubscribePayload[]>) => {
       player?.setSubscriptions(subs);
     });
   }, [player]);
@@ -127,8 +123,8 @@ export function MessagePipelineProvider({
   const msPerFrameRef = useRef<number>(16);
   msPerFrameRef.current = 1000 / (messageRate ?? 60);
 
-  const dispatch = store.getState().dispatch;
   useEffect(() => {
+    const dispatch = store.getState().dispatch;
     if (!player) {
       // When there is no player, set the player state to the default to go back to a state where we
       // indicate the player is not present.
@@ -143,7 +139,7 @@ export function MessagePipelineProvider({
     const { listener, cleanupListener } = createPlayerListener({
       msPerFrameRef,
       promisesToWaitForRef,
-      dispatch,
+      store,
     });
     player.setListener(listener);
     return () => {
@@ -155,7 +151,7 @@ export function MessagePipelineProvider({
         renderDone: undefined,
       });
     };
-  }, [player, dispatch]);
+  }, [player, store]);
 
   useEffect(() => {
     player?.setGlobalVariables(globalVariables);
@@ -202,14 +198,16 @@ function concatProblems(origState: PlayerState, problems: PlayerProblem[]): Play
 function createPlayerListener(args: {
   msPerFrameRef: React.MutableRefObject<number>;
   promisesToWaitForRef: React.MutableRefObject<FramePromise[]>;
-  dispatch: (action: MessagePipelineStateAction) => void;
+  store: StoreApi<MessagePipelineInternalState>;
 }): {
   listener: (state: PlayerState) => Promise<void>;
   cleanupListener: () => void;
 } {
-  const { msPerFrameRef, promisesToWaitForRef, dispatch: updateState } = args;
+  const { msPerFrameRef, promisesToWaitForRef, store } = args;
+  const updateState = store.getState().dispatch;
   const messageOrderTracker = new MessageOrderTracker();
   let closed = false;
+  let prevPlayerId: string | undefined;
   let resolveFn: undefined | (() => void);
   const listener = async (listenerPlayerState: PlayerState) => {
     if (closed) {
@@ -266,6 +264,11 @@ function createPlayerListener(args: {
         resolveFn();
       }, frameTime);
     }
+
+    if (prevPlayerId != undefined && listenerPlayerState.playerId !== prevPlayerId) {
+      store.getState().reset();
+    }
+    prevPlayerId = listenerPlayerState.playerId;
 
     updateState({
       type: "update-player-state",

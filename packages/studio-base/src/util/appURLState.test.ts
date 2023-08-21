@@ -3,7 +3,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import { Time, toRFC3339String } from "@foxglove/rostime";
-import { LayoutID } from "@foxglove/studio-base/index";
 import {
   AppURLState,
   updateAppURLState,
@@ -30,12 +29,6 @@ describe("app state url parser", () => {
       expect(parseAppURLState(urlBuilder())).toBeUndefined();
     });
 
-    it("parses urls with only a layoutId", () => {
-      const url = urlBuilder();
-      url.searchParams.append("layoutId", "1234");
-      expect(parseAppURLState(url)?.layoutId).toBe("1234");
-    });
-
     it("parses rosbag data state urls", () => {
       const url = urlBuilder();
       url.searchParams.append("ds", "ros1-remote-bagfile");
@@ -49,12 +42,6 @@ describe("app state url parser", () => {
       });
     });
 
-    it("parses urls with only a layoutUrl", () => {
-      const url = urlBuilder();
-      url.searchParams.append("layoutUrl", "http://localhost/layout.json");
-      expect(parseAppURLState(url)?.layoutUrl).toBe("http://localhost/layout.json");
-    });
-
     it("parses data platform state urls", () => {
       const now: Time = { sec: new Date().getTime(), nsec: 0 };
       const time = toRFC3339String({ sec: now.sec + 500, nsec: 0 });
@@ -62,7 +49,6 @@ describe("app state url parser", () => {
       const end = toRFC3339String({ sec: now.sec + 1000, nsec: 0 });
       const url = urlBuilder();
       url.searchParams.append("ds", "foo");
-      url.searchParams.append("layoutId", "1234");
       url.searchParams.append("time", time);
       url.searchParams.append("ds.bar", "barValue");
       url.searchParams.append("ds.baz", "bazValue");
@@ -72,7 +58,6 @@ describe("app state url parser", () => {
 
       const parsed = parseAppURLState(url);
       expect(parsed).toMatchObject({
-        layoutId: "1234",
         ds: "foo",
         time: { sec: now.sec + 500, nsec: 0 },
         dsParams: { bar: "barValue", baz: "bazValue" },
@@ -84,11 +69,9 @@ describe("app state url parser", () => {
 describe("app state encoding", () => {
   const baseURL = () => new URL("http://example.com");
 
-  it("encodes rosbag urls and layout urls", () => {
+  it("encodes rosbag urls", () => {
     expect(
       updateAppURLState(baseURL(), {
-        layoutId: "123" as LayoutID,
-        layoutUrl: "http://localhost/layout.json",
         time: undefined,
         ds: "ros1-remote-bagfile",
         dsParams: {
@@ -96,35 +79,30 @@ describe("app state encoding", () => {
         },
       }).href,
     ).toEqual(
-      "http://example.com/?ds=ros1-remote-bagfile&ds.url=http%3A%2F%2Ffoxglove.dev%2Ftest.bag&layoutId=123&layoutUrl=http%3A%2F%2Flocalhost%2Flayout.json",
+      "http://example.com/?ds=ros1-remote-bagfile&ds.url=http%3A%2F%2Ffoxglove.dev%2Ftest.bag",
     );
   });
 
   describe("url states", () => {
-    const layoutId = "123" as LayoutID;
     const eventId = "dummyEventId";
     const time = undefined;
     it.each<AppURLState>([
       {
-        layoutId,
         time,
         ds: "ros1",
         dsParams: { url: "http://example.com:11311/test.bag", eventId },
       },
       {
-        layoutId,
         time,
         ds: "ros2",
         dsParams: { url: "http://example.com:11311/test.bag", eventId },
       },
       {
-        layoutId,
         time,
         ds: "ros1-remote-bagfile",
         dsParams: { url: "http://example.com/test.bag", eventId },
       },
       {
-        layoutId,
         time,
         ds: "rosbridge-websocket",
         dsParams: { url: "ws://foxglove.dev:9090/test.bag", eventId },
@@ -135,7 +113,7 @@ describe("app state encoding", () => {
       expect(encodededURL).toEqual(
         `http://example.com/?ds=${state.ds}&ds.eventId=${eventId}&ds.url=${encodeURIComponent(
           url ?? "",
-        )}&layoutId=${layoutId}`,
+        )}`,
       );
     });
   });

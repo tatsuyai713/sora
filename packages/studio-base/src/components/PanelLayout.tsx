@@ -11,7 +11,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import { CircularProgress, Link, styled as muiStyled, Typography } from "@mui/material";
+import { CircularProgress } from "@mui/material";
 import React, { PropsWithChildren, Suspense, useCallback, useMemo } from "react";
 import { useDrop } from "react-dnd";
 import {
@@ -21,23 +21,19 @@ import {
   MosaicWindow,
   MosaicWithoutDragDropContext,
 } from "react-mosaic-component";
+import { makeStyles } from "tss-react/mui";
 
-import { AppSetting } from "@foxglove/studio-base/AppSetting";
 import { EmptyPanelLayout } from "@foxglove/studio-base/components/EmptyPanelLayout";
 import EmptyState from "@foxglove/studio-base/components/EmptyState";
+import { useAppContext } from "@foxglove/studio-base/context/AppContext";
 import {
   LayoutState,
   useCurrentLayoutActions,
   useCurrentLayoutSelector,
   usePanelMosaicId,
 } from "@foxglove/studio-base/context/CurrentLayoutContext";
-import { LayoutData } from "@foxglove/studio-base/context/CurrentLayoutContext/actions";
 import { useExtensionCatalog } from "@foxglove/studio-base/context/ExtensionCatalogContext";
-import { useLayoutManager } from "@foxglove/studio-base/context/LayoutManagerContext";
 import { usePanelCatalog } from "@foxglove/studio-base/context/PanelCatalogContext";
-import { useWorkspaceActions } from "@foxglove/studio-base/context/WorkspaceContext";
-import { useAppConfigurationValue } from "@foxglove/studio-base/hooks/useAppConfigurationValue";
-import { defaultPlaybackConfig } from "@foxglove/studio-base/providers/CurrentLayoutProvider/reducers";
 import { MosaicDropResult, PanelConfig } from "@foxglove/studio-base/types/panels";
 import { getPanelIdForType, getPanelTypeFromId } from "@foxglove/studio-base/util/layout";
 
@@ -58,21 +54,24 @@ type Props = {
 // place the dropped item as a sibling of the Tab), as well as the "root drop targets" inside the
 // nested mosaic (that would place the dropped item as a direct child of the Tab). Makes it easier
 // to drop panels into a tab layout.
-const HideTopLevelDropTargets = muiStyled("div")`
-  margin: 0;
+const useStyles = makeStyles()({
+  hideTopLevelDropTargets: {
+    margin: 0,
 
-  .mosaic-root + .drop-target-container {
-    display: none !important;
-  }
-  & > .mosaic-window > .drop-target-container {
-    display: none !important;
-  }
-`;
+    ".mosaic-root + .drop-target-container": {
+      display: "none !important",
+    },
+    "& > .mosaic-window > .drop-target-container": {
+      display: "none !important",
+    },
+  },
+});
 
 // This wrapper makes the tabId available in the drop result when something is dropped into a nested
 // drop target. This allows a panel to know which mosaic it was dropped in regardless of nesting
 // level.
 function TabMosaicWrapper({ tabId, children }: PropsWithChildren<{ tabId?: string }>) {
+  const { classes, cx } = useStyles();
   const [, drop] = useDrop<unknown, MosaicDropResult, never>({
     accept: MosaicDragType.WINDOW,
     drop: (_item, monitor) => {
@@ -86,9 +85,9 @@ function TabMosaicWrapper({ tabId, children }: PropsWithChildren<{ tabId?: strin
     },
   });
   return (
-    <HideTopLevelDropTargets className="mosaic-tile" ref={drop}>
+    <div className={cx(classes.hideTopLevelDropTargets, "mosaic-tile")} ref={drop}>
       {children}
-    </HideTopLevelDropTargets>
+    </div>
   );
 }
 
@@ -195,50 +194,16 @@ function LoadingState(): JSX.Element {
   );
 }
 
-const selectedLayoutLoadingSelector = (state: LayoutState) => state.selectedLayout?.loading;
 const selectedLayoutExistsSelector = (state: LayoutState) =>
   state.selectedLayout?.data != undefined;
 const selectedLayoutMosaicSelector = (state: LayoutState) => state.selectedLayout?.data?.layout;
 
 export default function PanelLayout(): JSX.Element {
-  const { changePanelLayout, setSelectedLayoutId } = useCurrentLayoutActions();
-  const { openLayoutBrowser } = useWorkspaceActions();
-  const layoutManager = useLayoutManager();
+  const { layoutEmptyState } = useAppContext();
+  const { changePanelLayout } = useCurrentLayoutActions();
   const layoutExists = useCurrentLayoutSelector(selectedLayoutExistsSelector);
-  const layoutLoading = useCurrentLayoutSelector(selectedLayoutLoadingSelector);
   const mosaicLayout = useCurrentLayoutSelector(selectedLayoutMosaicSelector);
   const registeredExtensions = useExtensionCatalog((state) => state.installedExtensions);
-  const [enableNewTopNav = false] = useAppConfigurationValue<boolean>(AppSetting.ENABLE_NEW_TOPNAV);
-
-  const createNewLayout = async () => {
-    const layoutData: Omit<LayoutData, "name" | "id"> = {
-      configById: {},
-      globalVariables: {},
-      userNodes: {},
-      playbackConfig: defaultPlaybackConfig,
-    };
-
-    const layout = await layoutManager.saveNewLayout({
-      name: "Default",
-      data: layoutData,
-      permission: "CREATOR_WRITE",
-    });
-    setSelectedLayoutId(layout.id);
-
-    if (!enableNewTopNav) {
-      openLayoutBrowser();
-    }
-  };
-
-  const selectExistingLayout = async () => {
-    if (!enableNewTopNav) {
-      const layouts = await layoutManager.getLayouts();
-      if (layouts[0]) {
-        setSelectedLayoutId(layouts[0].id);
-      }
-    }
-    openLayoutBrowser();
-  };
 
   const onChange = useCallback(
     (newLayout: MosaicNode<string> | undefined) => {
@@ -257,24 +222,9 @@ export default function PanelLayout(): JSX.Element {
     return <UnconnectedPanelLayout layout={mosaicLayout} onChange={onChange} />;
   }
 
-  if (layoutLoading === true) {
-    return <LoadingState />;
+  if (layoutEmptyState) {
+    return layoutEmptyState;
   }
 
-  return (
-    <EmptyState>
-      <Typography display="block" variant="body1" color="text.primary">
-        You don&apos;t currently have a layout selected.
-      </Typography>
-      <Link onClick={selectExistingLayout} underline="hover" color="primary" variant="body1">
-        Select an existing layout
-      </Link>{" "}
-      <Typography display="inline-flex" variant="body1" color="text.primary">
-        or
-      </Typography>{" "}
-      <Link onClick={createNewLayout} underline="hover" color="primary" variant="body1">
-        Create a new layout
-      </Link>
-    </EmptyState>
-  );
+  return <></>;
 }

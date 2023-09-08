@@ -4,7 +4,7 @@
 
 import { vec3 } from "gl-matrix";
 import i18next from "i18next";
-import { debounce, maxBy } from "lodash";
+import * as _ from "lodash-es";
 import * as THREE from "three";
 import { v4 as uuidv4 } from "uuid";
 
@@ -594,7 +594,7 @@ export class Urdfs extends SceneExtension<UrdfRenderable> {
         const quaternion = tempQuaternion1.setFromAxisAngle(axis, degrees * DEG2RAD);
         const euler = tempEuler.setFromQuaternion(quaternion);
         frame.offsetEulerDegrees = [euler.x * RAD2DEG, euler.y * RAD2DEG, euler.z * RAD2DEG];
-        this.saveSetting(["transforms", frameKey, "rpyOffset"], frame.offsetEulerDegrees);
+        this.saveSetting(["transforms", frameKey, "rpyCoefficient"], frame.offsetEulerDegrees);
       } else {
         const scale = action.payload.value as number;
         axis.multiplyScalar(scale);
@@ -715,7 +715,7 @@ export class Urdfs extends SceneExtension<UrdfRenderable> {
 
     // Add this instance to the config
     this.renderer.updateConfig((draft) => {
-      const maxOrderLayer = maxBy(Object.values(draft.layers), (layer) => layer?.order);
+      const maxOrderLayer = _.maxBy(Object.values(draft.layers), (layer) => layer?.order);
       const order = 1 + (maxOrderLayer?.order ?? 0);
       draft.layers[instanceId] = { ...config, order };
     });
@@ -915,7 +915,7 @@ export class Urdfs extends SceneExtension<UrdfRenderable> {
       });
   }
 
-  #debouncedLoadUrdf = debounce(this.#loadUrdf.bind(this), 500);
+  #debouncedLoadUrdf = _.debounce(this.#loadUrdf.bind(this), 500);
 
   #loadRobot(renderable: UrdfRenderable, { robot, frames, transforms }: ParsedUrdf): void {
     const renderer = this.renderer;
@@ -1169,7 +1169,7 @@ function isValidUrl(str: string): boolean {
   try {
     const url = new URL(str);
     return VALID_PROTOCOLS.includes(url.protocol);
-  } catch (_) {
+  } catch (_err) {
     return false;
   }
 }

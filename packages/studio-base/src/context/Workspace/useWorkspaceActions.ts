@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import { Draft, produce } from "immer";
-import { union } from "lodash";
+import * as _ from "lodash-es";
 import { Dispatch, SetStateAction, useCallback, useMemo } from "react";
 import { useMountedState } from "react-use";
 
@@ -209,10 +209,11 @@ export function useWorkspaceActions(): WorkspaceActions {
         },
 
         preferences: {
-          close: () =>
+          close: () => {
             set((draft) => {
               draft.dialogs.preferences = { open: false, initialTab: undefined };
-            }),
+            });
+          },
           open: (initialTab?: AppSettingsTab) => {
             set((draft) => {
               draft.dialogs.preferences = { open: true, initialTab };
@@ -230,16 +231,17 @@ export function useWorkspaceActions(): WorkspaceActions {
         finishTour: (tour: string) => {
           set((draft) => {
             draft.featureTours.active = undefined;
-            draft.featureTours.shown = union(draft.featureTours.shown, [tour]);
+            draft.featureTours.shown = _.union(draft.featureTours.shown, [tour]);
           });
         },
       },
 
-      openPanelSettings: () =>
+      openPanelSettings: () => {
         set((draft) => {
           draft.sidebars.left.item = "panel-settings";
           draft.sidebars.left.open = true;
-        }),
+        });
+      },
 
       playbackControlActions: {
         setRepeat: (setter: SetStateAction<boolean>) => {
@@ -274,10 +276,11 @@ export function useWorkspaceActions(): WorkspaceActions {
             });
           },
 
-          setSize: (leftSidebarSize: undefined | number) =>
+          setSize: (leftSidebarSize: undefined | number) => {
             set((draft) => {
               draft.sidebars.left.size = leftSidebarSize;
-            }),
+            });
+          },
         },
         right: {
           selectItem: (selectedRightSidebarItem: undefined | RightSidebarItemKey) => {
@@ -302,10 +305,11 @@ export function useWorkspaceActions(): WorkspaceActions {
             });
           },
 
-          setSize: (rightSidebarSize: undefined | number) =>
+          setSize: (rightSidebarSize: undefined | number) => {
             set((draft) => {
               draft.sidebars.right.size = rightSidebarSize;
-            }),
+            });
+          },
         },
       },
 

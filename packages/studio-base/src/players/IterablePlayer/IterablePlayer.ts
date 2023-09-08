@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import assert from "assert";
-import { isEqual } from "lodash";
+import * as _ from "lodash-es";
 import { v4 as uuidv4 } from "uuid";
 
 import { debouncePromise } from "@foxglove/den/async";
@@ -172,6 +172,10 @@ export class IterablePlayer implements Player {
 
   #untilTime?: Time;
 
+  /** Promise that resolves when the player is closed. Only used for testing currently */
+  public readonly isClosed: Promise<void>;
+  #resolveIsClosed: () => void = () => {};
+
   public constructor(options: IterablePlayerOptions) {
     const { metricsCollector, urlParams, source, name, enablePreload, sourceId } = options;
 
@@ -183,6 +187,10 @@ export class IterablePlayer implements Player {
     this.#metricsCollector.playerConstructed();
     this.#enablePreload = enablePreload ?? true;
     this.#sourceId = sourceId;
+
+    this.isClosed = new Promise((resolveClose) => {
+      this.#resolveIsClosed = resolveClose;
+    });
 
     // Wrap emitStateImpl in a debouncePromise for our states to call. Since we can emit from states
     // or from block loading updates we use debouncePromise to guard against concurrent emits.
@@ -206,7 +214,7 @@ export class IterablePlayer implements Player {
   }
 
   #startPlayImpl(opt?: { untilTime: Time }): void {
-    if (this.#isPlaying || this.#untilTime || !this.#start || !this.#end) {
+    if (this.#isPlaying || this.#untilTime != undefined || !this.#start || !this.#end) {
       return;
     }
 
@@ -223,6 +231,8 @@ export class IterablePlayer implements Player {
     // finish and it will see that we should be playing
     if (this.#state === "idle" && (!this.#nextState || this.#nextState === "idle")) {
       this.#setState("play");
+    } else {
+      this.#queueEmitState(); // update isPlaying state to UI
     }
   }
 
@@ -238,6 +248,8 @@ export class IterablePlayer implements Player {
     this.#lastRangeMillis = undefined;
     if (this.#state === "play") {
       this.#setState("idle");
+    } else {
+      this.#queueEmitState(); // update isPlaying state to UI
     }
   }
 
@@ -301,7 +313,7 @@ export class IterablePlayer implements Player {
     );
 
     // If there are no changes to topics there's no reason to perform a "seek" to trigger loading
-    if (isEqual(allTopics, this.#allTopics) && isEqual(preloadTopics, this.#preloadTopics)) {
+    if (_.isEqual(allTopics, this.#allTopics) && _.isEqual(preloadTopics, this.#preloadTopics)) {
       return;
     }
 
@@ -351,6 +363,10 @@ export class IterablePlayer implements Player {
 
   /** Request the state to switch to newState */
   #setState(newState: IterablePlayerState) {
+    // nothing should override closing the player
+    if (this.#nextState === "close") {
+      return;
+    }
     log.debug(`Set next state: ${newState}`);
     this.#nextState = newState;
     this.#abort?.abort();
@@ -707,7 +723,7 @@ export class IterablePlayer implements Player {
       await this.#resetPlaybackIterator();
       this.#setState(this.#isPlaying ? "play" : "idle");
     } catch (err) {
-      if (this.#nextState && err instanceof DOMException && err.name === "AbortError") {
+      if (this.#nextState && err.name === "AbortError") {
         log.debug("Aborted backfill");
       } else {
         throw err;
@@ -729,7 +745,7 @@ export class IterablePlayer implements Player {
     }
 
     if (this.#hasError) {
-      return await this.#listener({
+      await this.#listener({
         name: this.#name,
         presence: PlayerPresence.ERROR,
         progress: {},
@@ -743,6 +759,7 @@ export class IterablePlayer implements Player {
           parameters: this.#urlParams,
         },
       });
+      return;
     }
 
     const messages = this.#messages;
@@ -781,7 +798,7 @@ export class IterablePlayer implements Player {
       },
     };
 
-    return await this.#listener(data);
+    await this.#listener(data);
   }
 
   /**
@@ -951,7 +968,9 @@ export class IterablePlayer implements Player {
     };
 
     const abort = (this.#abort = new AbortController());
-    const aborted = new Promise((resolve) => abort.signal.addEventListener("abort", resolve));
+    const aborted = new Promise((resolve) => {
+      abort.signal.addEventListener("abort", resolve);
+    });
 
     const rangeChangeHandler = () => {
       this.#progress = {
@@ -1044,6 +1063,7 @@ export class IterablePlayer implements Player {
     await this.#playbackIterator?.return?.();
     this.#playbackIterator = undefined;
     await this.#iterableSource.terminate?.();
+    this.#resolveIsClosed();
   }
 
   async #startBlockLoading() {

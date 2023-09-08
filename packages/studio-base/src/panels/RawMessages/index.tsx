@@ -12,8 +12,7 @@
 //   You may not use this file except in compliance with the License.
 
 import { Checkbox, FormControlLabel, Typography, useTheme } from "@mui/material";
-// eslint-disable-next-line no-restricted-imports
-import { first, get, isEqual, last, padStart } from "lodash";
+import * as _ from "lodash-es";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactHoverObserver from "react-hover-observer";
 import Tree from "react-json-tree";
@@ -60,7 +59,7 @@ import {
   getStructureItemForPath,
   getValueActionForValue,
 } from "./getValueActionForValue";
-import { Constants, RawMessagesPanelConfig } from "./types";
+import { Constants, NodeState, RawMessagesPanelConfig } from "./types";
 import { DATA_ARRAY_PREVIEW_LIMIT, generateDeepKeyPaths, toggleExpansion } from "./utils";
 
 type Props = {
@@ -110,6 +109,18 @@ function RawMessages(props: Props) {
   const { topicPath, diffMethod, diffTopicPath, diffEnabled, showFullMessageForDiff } = config;
   const { topics, datatypes } = useDataSourceInfo();
   const updatePanelSettingsTree = usePanelSettingsTreeUpdate();
+  const { setMessagePathDropConfig } = usePanelContext();
+
+  useEffect(() => {
+    setMessagePathDropConfig({
+      getDropStatus(_path) {
+        return { canDrop: true, effect: "replace" };
+      },
+      handleDrop(path) {
+        saveConfig({ topicPath: path.path });
+      },
+    });
+  }, [setMessagePathDropConfig, saveConfig]);
 
   const defaultGetItemString = useGetItemStringWithTimezone();
   const getItemString = useMemo(
@@ -169,7 +180,10 @@ function RawMessages(props: Props) {
     if (expansion === "all") {
       return false;
     }
-    if (typeof expansion === "object" && Object.values(expansion).some((v) => v === "c")) {
+    if (
+      typeof expansion === "object" &&
+      Object.values(expansion).some((v) => v === NodeState.Collapsed)
+    ) {
       return true;
     } else {
       return false;
@@ -245,7 +259,7 @@ function RawMessages(props: Props) {
       // A nanosecond label of 099999999 makes it easier to realize this is 0.09 seconds compared to
       // 99999999 which requires some counting to reamize this is also 0.09
       if (keyPath[0] === "nsec" && typeof itemValue === "number") {
-        itemLabel = padStart(itemLabel, 9, "0");
+        itemLabel = _.padStart(itemLabel, 9, "0");
       }
 
       return { arrLabel, itemLabel };
@@ -290,7 +304,7 @@ function RawMessages(props: Props) {
     ) => (
       <ReactHoverObserver className={classes.hoverObserver}>
         {({ isHovering }: { isHovering: boolean }) => {
-          const lastKeyPath = last(keyPath) as number;
+          const lastKeyPath = _.last(keyPath) as number;
           let valueAction: ValueAction | undefined;
           if (isHovering && structureItem) {
             valueAction = getValueActionForValue(
@@ -352,10 +366,10 @@ function RawMessages(props: Props) {
       }
 
       const joinedPath = keypath.join("~");
-      if (expansion && expansion[joinedPath] === "c") {
+      if (expansion && expansion[joinedPath] === NodeState.Collapsed) {
         return false;
       }
-      if (expansion && expansion[joinedPath] === "e") {
+      if (expansion && expansion[joinedPath] === NodeState.Expanded) {
         return true;
       }
 
@@ -422,7 +436,7 @@ function RawMessages(props: Props) {
           >
             <MaybeCollapsedValue itemLabel={String(singleVal)} />
           </Typography>
-        ) : diffEnabled && isEqual({}, diff) ? (
+        ) : diffEnabled && _.isEqual({}, diff) ? (
           <EmptyState>No difference found</EmptyState>
         ) : (
           <>
@@ -434,7 +448,9 @@ function RawMessages(props: Props) {
                   <Checkbox
                     size="small"
                     defaultChecked
-                    onChange={() => saveConfig({ showFullMessageForDiff: !showFullMessageForDiff })}
+                    onChange={() => {
+                      saveConfig({ showFullMessageForDiff: !showFullMessageForDiff });
+                    }}
                   />
                 }
                 label="Show full msg"
@@ -443,7 +459,7 @@ function RawMessages(props: Props) {
             <Tree
               labelRenderer={(raw) => (
                 <>
-                  <DiffSpan>{first(raw)}</DiffSpan>
+                  <DiffSpan>{_.first(raw)}</DiffSpan>
                   {/* https://stackoverflow.com/questions/62319014/make-text-selection-treat-adjacent-elements-as-separate-words */}
                   <span style={{ fontSize: 0 }}>&nbsp;</span>
                 </>
@@ -535,7 +551,7 @@ function RawMessages(props: Props) {
                     textDecoration =
                       keyPath[0] === diffLabels.DELETED.labelText ? "line-through" : "none";
                   }
-                  const nestedObj = get(diff, keyPath.slice().reverse(), {});
+                  const nestedObj = _.get(diff, keyPath.slice().reverse(), {});
                   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                   const nestedObjKey = Object.keys(nestedObj)[0];
                   if (nestedObjKey != undefined && diffLabelsByLabelText[nestedObjKey]) {
@@ -574,7 +590,7 @@ function RawMessages(props: Props) {
                   }
                   let backgroundColor;
                   let textDecoration;
-                  const nestedObj = get(diff, keyPath.slice().reverse(), {});
+                  const nestedObj = _.get(diff, keyPath.slice().reverse(), {});
                   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                   const nestedObjKey = Object.keys(nestedObj)[0];
                   if (nestedObjKey != undefined && diffLabelsByLabelText[nestedObjKey]) {

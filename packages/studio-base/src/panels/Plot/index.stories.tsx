@@ -14,7 +14,7 @@
 import { StoryObj } from "@storybook/react";
 import { screen, userEvent, waitFor } from "@storybook/testing-library";
 import { produce } from "immer";
-import { shuffle } from "lodash";
+import * as _ from "lodash-es";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { makeStyles } from "tss-react/mui";
 
@@ -305,7 +305,7 @@ export const fixture: Fixture = {
     // Shuffle the location messages so that they are out of stamp order
     // This is used in the headerStamp series test to check that the dataset is sorted
     // prior to rendering. If the dataset is not sorted properly, the plot is jumbled.
-    "/some_topic/location_shuffled": shuffle(
+    "/some_topic/location_shuffled": _.shuffle(
       locationMessages.map(
         (message): MessageEvent => ({
           topic: "/some_topic/location_shuffled",
@@ -493,7 +493,13 @@ export const LineGraphWithSettings: StoryObj = {
     return (
       <PlotWrapper
         pauseFrame={pauseFrame}
-        config={{ ...exampleConfig, minYValue: -1, maxYValue: 1, minXValue: 0, maxXValue: 3 }}
+        config={{
+          ...exampleConfig,
+          minYValue: -3.1415,
+          maxYValue: 0.00001,
+          minXValue: 0.001234,
+          maxXValue: 30,
+        }}
         includeSettings
       />
     );
@@ -507,8 +513,12 @@ export const LineGraphWithSettings: StoryObj = {
   name: "line graph with settings",
 
   play: async (ctx) => {
-    const label = await screen.findByTestId("settings__nodeHeaderToggle__yAxis");
-    await userEvent.click(label);
+    const yLabel = await screen.findByTestId("settings__nodeHeaderToggle__yAxis");
+    await userEvent.click(yLabel);
+
+    const xLabel = await screen.findByTestId("settings__nodeHeaderToggle__xAxis");
+    await userEvent.click(xLabel);
+
     await ctx.parameters.storyReady;
   },
 };
@@ -1151,7 +1161,7 @@ export const IndexBasedXAxisForArray: StoryObj = {
 
 export const IndexBasedXAxisForArrayWithUpdate: StoryObj = {
   render: function Story() {
-    const readySignal = useReadySignal({ count: 3 });
+    const readySignal = useReadySignal({ count: 1 });
 
     const [ourFixture, setOurFixture] = useState(structuredClone(fixture));
 
@@ -1369,7 +1379,7 @@ export const CustomXAxisTopicWithMismatchedDataLengths: StoryObj = {
 
 export const SuperCloseValues: StoryObj = {
   render: function Story() {
-    const readySignal = useReadySignal({ count: 3 });
+    const readySignal = useReadySignal({ count: 1 });
     const pauseFrame = useCallback(() => readySignal, [readySignal]);
 
     return (

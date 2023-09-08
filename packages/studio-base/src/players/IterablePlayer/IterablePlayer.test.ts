@@ -3,8 +3,9 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { last } from "lodash";
+import * as _ from "lodash-es";
 
+import { signal } from "@foxglove/den/async";
 import { fromSec } from "@foxglove/rostime";
 import {
   MessageEvent,
@@ -116,7 +117,9 @@ describe("IterablePlayer", () => {
       sourceId: "test",
     });
     const store = new PlayerStateStore(4);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
     const playerStates = await store.done;
 
     const baseState: PlayerStateWithoutPlayerId = {
@@ -176,6 +179,7 @@ describe("IterablePlayer", () => {
     ]);
 
     player.close();
+    await player.isClosed;
   });
 
   it("when seeking during a seek backfill, start another seek after the current one exits", async () => {
@@ -187,7 +191,9 @@ describe("IterablePlayer", () => {
     });
     const store = new PlayerStateStore(4);
     player.setSubscriptions([{ topic: "foo" }]);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
 
     // Wait for initial setup
     await store.done;
@@ -277,6 +283,7 @@ describe("IterablePlayer", () => {
     expect(playerStates).toEqual([withMessages, baseState]);
 
     player.close();
+    await player.isClosed;
   });
 
   it("sets buffering presence when backfill takes too long", async () => {
@@ -288,7 +295,9 @@ describe("IterablePlayer", () => {
     });
     const store = new PlayerStateStore(4);
     player.setSubscriptions([{ topic: "foo" }]);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
 
     // Wait for initial setup
     await store.done;
@@ -355,6 +364,187 @@ describe("IterablePlayer", () => {
     expect(playerStates).toEqual([bufferingState, baseState, baseState]);
 
     player.close();
+    await player.isClosed;
+  });
+
+  it("startPlayback emits when seek-backfill state is active", async () => {
+    const source = new TestSource();
+    const player = new IterablePlayer({
+      source,
+      enablePreload: false,
+      sourceId: "test",
+    });
+    const store = new PlayerStateStore(4);
+    player.setSubscriptions([{ topic: "foo" }]);
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
+
+    // Wait for initial setup
+    await store.done;
+
+    const origMsgIterator = source.messageIterator.bind(source);
+    source.messageIterator = async function* messageIterator(
+      _args: MessageIteratorArgs,
+    ): AsyncIterableIterator<Readonly<IteratorResult>> {
+      source.messageIterator = origMsgIterator;
+
+      yield {
+        type: "message-event",
+        msgEvent: {
+          topic: "foo",
+          receiveTime: { sec: 0, nsec: 99000001 },
+          message: undefined,
+          sizeInBytes: 0,
+          schemaName: "foo",
+        },
+        connectionId: undefined,
+      };
+    };
+
+    const backfillStarted = signal();
+
+    let resolveBackfill: (value?: unknown) => void = () => {};
+    const backfillPromise = new Promise((resolve) => {
+      resolveBackfill = resolve;
+    });
+    // replace the message iterator with our own implementation
+    // This implementation performs a seekPlayback during backfill.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalMethod = source.getBackfillMessages;
+    source.getBackfillMessages = async function () {
+      source.getBackfillMessages = originalMethod;
+      backfillStarted.resolve();
+      await backfillPromise;
+      return [
+        {
+          topic: "foo",
+          receiveTime: { sec: 0, nsec: 1 },
+          message: undefined,
+          sizeInBytes: 0,
+          schemaName: "foo",
+        },
+      ];
+    };
+
+    // Reset store to get state from the seeks
+    store.reset(1);
+    const getIsPlaying = (state: PlayerStateWithoutPlayerId) => state.activeData?.isPlaying;
+    // starts a seek backfill does not emit unless it takes too long or it finishes
+    player.seekPlayback({ sec: 1, nsec: 0 });
+    await backfillStarted;
+    // emits state
+    let playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([false]);
+    store.reset(1);
+    player.startPlayback();
+
+    playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([true]);
+    // emits state when backfill is finished
+    store.reset(1);
+    resolveBackfill();
+
+    playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([true]);
+
+    player.close();
+    await player.isClosed;
+  });
+
+  it("pausePlayback emits when seek-backfill state is active", async () => {
+    const source = new TestSource();
+    const player = new IterablePlayer({
+      source,
+      enablePreload: false,
+      sourceId: "test",
+    });
+    const store = new PlayerStateStore(4);
+    player.setSubscriptions([{ topic: "foo" }]);
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
+
+    // Wait for initial setup
+    await store.done;
+    // Reset store to get state from the seeks
+
+    const origMsgIterator = source.messageIterator.bind(source);
+    source.messageIterator = async function* messageIterator(
+      _args: MessageIteratorArgs,
+    ): AsyncIterableIterator<Readonly<IteratorResult>> {
+      source.messageIterator = origMsgIterator;
+
+      yield {
+        type: "message-event",
+        msgEvent: {
+          topic: "foo",
+          receiveTime: { sec: 0, nsec: 99000001 },
+          message: undefined,
+          sizeInBytes: 0,
+          schemaName: "foo",
+        },
+        connectionId: undefined,
+      };
+    };
+
+    let resolveBackfill: (value?: unknown) => void = () => {};
+    const backfillPromise = new Promise((resolve) => {
+      resolveBackfill = resolve;
+    });
+
+    const backfillStarted = signal();
+    // replace the message iterator with our own implementation
+    // This implementation performs a seekPlayback during backfill.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalMethod = source.getBackfillMessages;
+    source.getBackfillMessages = async function () {
+      source.getBackfillMessages = originalMethod;
+      backfillStarted.resolve();
+      await backfillPromise;
+      return [
+        {
+          topic: "foo",
+          receiveTime: { sec: 0, nsec: 1 },
+          message: undefined,
+          sizeInBytes: 0,
+          schemaName: "foo",
+        },
+      ];
+    };
+    store.reset(1);
+    // emit state
+    player.startPlayback();
+
+    const getIsPlaying = (state: PlayerStateWithoutPlayerId) => state.activeData?.isPlaying;
+    let playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([true]);
+
+    store.reset(1);
+    // starts a seek backfill does not emit unless it takes too long or it finishes
+    player.seekPlayback({ sec: 1, nsec: 0 });
+    await backfillStarted;
+
+    playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([true]);
+
+    store.reset(1);
+    // emits state
+    player.pausePlayback();
+    // emits state when backfill is finished
+
+    playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([false]);
+    store.reset(2);
+
+    resolveBackfill();
+
+    playerStates = await store.done;
+    expect(playerStates.map(getIsPlaying)).toEqual([false, false]);
+
+    player.close();
+
+    await player.isClosed;
   });
 
   it("provides error message for inconsistent topic datatypes", async () => {
@@ -392,9 +582,11 @@ describe("IterablePlayer", () => {
       sourceId: "test",
     });
     const store = new PlayerStateStore(4);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
     const playerStates = await store.done;
-    expect(last(playerStates)!.problems).toEqual([
+    expect(_.last(playerStates)!.problems).toEqual([
       {
         message: "Inconsistent datatype for topic: A",
         severity: "warn",
@@ -413,7 +605,9 @@ describe("IterablePlayer", () => {
     });
     const store = new PlayerStateStore(4);
     player.setSubscriptions([{ topic: "foo" }]);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
 
     // starts a seek backfill
     player.seekPlayback(fromSec(0.5));
@@ -462,6 +656,7 @@ describe("IterablePlayer", () => {
     ]);
 
     player.close();
+    await player.isClosed;
   });
 
   it("should start a new iterator mid-tick when old iterator finishes", async () => {
@@ -472,7 +667,9 @@ describe("IterablePlayer", () => {
       sourceId: "test",
     });
     const store = new PlayerStateStore(4);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
 
     await store.done;
 
@@ -508,6 +705,7 @@ describe("IterablePlayer", () => {
     }
 
     player.close();
+    await player.isClosed;
   });
 
   it("should not override seek-backfill state when setPlayback speed is called", async () => {
@@ -518,7 +716,9 @@ describe("IterablePlayer", () => {
       sourceId: "test",
     });
     const store = new PlayerStateStore(4);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
     await store.done;
 
     player.seekPlayback({ sec: 0, nsec: 0 });
@@ -549,13 +749,15 @@ describe("IterablePlayer", () => {
 
     {
       // if the playback iterator is undefined it will throw an invariant error
-      expect(() => player.startPlayback()).not.toThrow();
+      expect(() => {
+        player.startPlayback();
+      }).not.toThrow();
       await store.done;
     }
 
     player.close();
+    await player.isClosed;
   });
-
   it("should make a new message iterator when topic subscriptions change", async () => {
     const source = new TestSource();
     const player = new IterablePlayer({
@@ -568,7 +770,9 @@ describe("IterablePlayer", () => {
 
     const store = new PlayerStateStore(4);
     player.setSubscriptions([{ topic: "foo" }]);
-    player.setListener(async (state) => await store.add(state));
+    player.setListener(async (state) => {
+      await store.add(state);
+    });
 
     // Wait for initial setup
     await store.done;
@@ -599,5 +803,6 @@ describe("IterablePlayer", () => {
     ]);
 
     player.close();
+    await player.isClosed;
   });
 });

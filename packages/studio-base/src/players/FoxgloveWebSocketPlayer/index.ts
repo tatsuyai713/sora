@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import * as base64 from "@protobufjs/base64";
-import { isEqual, uniqWith } from "lodash";
+import * as _ from "lodash-es";
 import { v4 as uuidv4 } from "uuid";
 
 import { debouncePromise } from "@foxglove/den/async";
@@ -425,7 +425,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
           } else if (
             channel.encoding === "cdr" &&
             (channel.schemaEncoding == undefined ||
-              ["ros2idl", "ros2msg"].includes(channel.schemaEncoding))
+              ["ros2idl", "ros2msg", "omgidl"].includes(channel.schemaEncoding))
           ) {
             schemaEncoding = channel.schemaEncoding ?? "ros2msg";
             schemaData = textEncoder.encode(channel.schema);
@@ -456,7 +456,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
           continue;
         }
         const existingChannel = this.#channelsByTopic.get(channel.topic);
-        if (existingChannel && !isEqual(channel, existingChannel.channel)) {
+        if (existingChannel && !_.isEqual(channel, existingChannel.channel)) {
           this.#problems.addProblem(`duplicate-topic:${channel.topic}`, {
             severity: "error",
             message: `Multiple channels advertise the same topic: ${channel.topic} (${existingChannel.channel.id} and ${channel.id})`,
@@ -686,7 +686,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
 
     this.#client.on("connectionGraphUpdate", (event) => {
       if (event.publishedTopics.length > 0 || event.removedTopics.length > 0) {
-        const newMap: Map<string, Set<string>> = new Map(this.#publishedTopics ?? new Map());
+        const newMap = new Map<string, Set<string>>(this.#publishedTopics ?? new Map());
         for (const { name, publisherIds } of event.publishedTopics) {
           newMap.set(name, new Set(publisherIds));
         }
@@ -694,7 +694,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
         this.#publishedTopics = newMap;
       }
       if (event.subscribedTopics.length > 0 || event.removedTopics.length > 0) {
-        const newMap: Map<string, Set<string>> = new Map(this.#subscribedTopics ?? new Map());
+        const newMap = new Map<string, Set<string>>(this.#subscribedTopics ?? new Map());
         for (const { name, subscriberIds } of event.subscribedTopics) {
           newMap.set(name, new Set(subscriberIds));
         }
@@ -702,7 +702,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
         this.#subscribedTopics = newMap;
       }
       if (event.advertisedServices.length > 0 || event.removedServices.length > 0) {
-        const newMap: Map<string, Set<string>> = new Map(this.#advertisedServices ?? new Map());
+        const newMap = new Map<string, Set<string>>(this.#advertisedServices ?? new Map());
         for (const { name, providerIds } of event.advertisedServices) {
           newMap.set(name, new Set(providerIds));
         }
@@ -895,7 +895,7 @@ export default class FoxgloveWebSocketPlayer implements Player {
 
   public setPublishers(publishers: AdvertiseOptions[]): void {
     // Filter out duplicates.
-    const uniquePublications = uniqWith(publishers, isEqual);
+    const uniquePublications = _.uniqWith(publishers, _.isEqual);
 
     // Save publications and return early if we are not connected or the advertise capability is missing.
     if (

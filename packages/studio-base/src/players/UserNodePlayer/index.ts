@@ -12,7 +12,7 @@
 //   You may not use this file except in compliance with the License.
 
 import { Mutex } from "async-mutex";
-import { isEqual, unionBy, uniq } from "lodash";
+import * as _ from "lodash-es";
 import memoizeWeak from "memoize-weak";
 import ReactDOM from "react-dom";
 import shallowequal from "shallowequal";
@@ -287,7 +287,7 @@ export default class UserNodePlayer implements Player {
       return blocks;
     }
 
-    const allInputTopics = uniq(fullRegistrations.flatMap((reg) => reg.inputs));
+    const allInputTopics = _.uniq(fullRegistrations.flatMap((reg) => reg.inputs));
 
     const outputBlocks: (MessageBlock | undefined)[] = [];
     for (const block of blocks) {
@@ -409,7 +409,7 @@ export default class UserNodePlayer implements Player {
     typesLib: string,
   ): Promise<NodeRegistration> {
     for (const cacheEntry of state.nodeRegistrationCache) {
-      if (nodeId === cacheEntry.nodeId && isEqual(userNode, cacheEntry.userNode)) {
+      if (nodeId === cacheEntry.nodeId && _.isEqual(userNode, cacheEntry.userNode)) {
         return cacheEntry.result;
       }
     }
@@ -758,12 +758,12 @@ export default class UserNodePlayer implements Player {
     let changedTopicsRequireEmitState = false;
     state.nodeRegistrations = validNodeRegistrations;
     const nodeTopics = state.nodeRegistrations.map(({ output }) => output);
-    if (!isEqual(nodeTopics, this.#memoizedNodeTopics)) {
+    if (!_.isEqual(nodeTopics, this.#memoizedNodeTopics)) {
       this.#memoizedNodeTopics = nodeTopics;
       changedTopicsRequireEmitState = true;
     }
     const nodeDatatypes = state.nodeRegistrations.map(({ nodeData: { datatypes } }) => datatypes);
-    if (!isEqual(nodeDatatypes, this.#memoizedNodeDatatypes)) {
+    if (!_.isEqual(nodeDatatypes, this.#memoizedNodeDatatypes)) {
       this.#memoizedNodeDatatypes = nodeDatatypes;
       changedTopicsRequireEmitState = true;
     }
@@ -791,7 +791,7 @@ export default class UserNodePlayer implements Player {
     // necessary because we won't emit a new state otherwise if there are no other active
     // subscriptions.
     if (changedTopicsRequireEmitState && this.#playerState?.activeData) {
-      const newTopics = unionBy(
+      const newTopics = _.unionBy(
         this.#playerState.activeData.topics,
         this.#memoizedNodeTopics,
         (top) => top.name,
@@ -1023,7 +1023,9 @@ export default class UserNodePlayer implements Player {
     // Delay _player.setListener until our setListener is called because setListener in some cases
     // triggers initialization logic and remote requests. This is an unfortunate API behavior and
     // naming choice, but it's better for us not to do trigger this logic in the constructor.
-    this.#player.setListener(async (state) => await this.#onPlayerState(state));
+    this.#player.setListener(async (state) => {
+      await this.#onPlayerState(state);
+    });
   }
 
   public setSubscriptions(subscriptions: SubscribePayload[]): void {

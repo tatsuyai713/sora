@@ -26,6 +26,49 @@ sviz is primarily written in TypeScript – contributions are welcome!
 
 The official binary distributions available at [studio.foxglove.dev](https://studio.foxglove.dev/) or [foxglove.dev/download](https://foxglove.dev/download) incorporate some closed-source functionality, such as integration with [Foxglove Data Platform](https://foxglove.dev/data-platform), multiple layouts, private extensions, and more. For more information on free and paid features, see our [Pricing](https://foxglove.dev/pricing).
 
+## Self-hosting
+
+Foxglove Studio can be self-hosted using our [docker image](https://ghcr.io/foxglove/studio). Please note that this build does not contain any closed source functionality.
+
+```sh
+docker run --rm -p "8080:8080" ghcr.io/foxglove/studio:latest
+```
+
+Foxglove Studio will be accessible in your browser at [localhost:8080](http://localhost:8080/).
+
+### Overriding the default layout
+
+[Bind-mount](https://docs.docker.com/storage/bind-mounts/) a layout JSON file at `/foxglove/default-layout.json` to set the default layout used when loading Studio from the Docker image.
+
+```sh
+docker run --rm -p "8080:8080" -v /path/to/custom_layout.json:/foxglove/default-layout.json ghcr.io/foxglove/studio:latest
+```
+
+### Self-hosted extensions
+
+You can deliver a fixed set of extensions when self-hosting by [bind-mounting](https://docs.docker.com/storage/bind-mounts/) a directory containing one or more `.foxe` extensions and a `manifest.json` to `/src/extensions`. The format for the manifest JSON is as follows:
+
+```json
+{
+  "packages": {
+    "<extension-id>": {
+      "url": "/extensions/<filename>.foxe",
+      "config": {
+        "name": "<extension-name>",
+        "displayName": "...",
+        "...": "..."
+      }
+    }
+  }
+}
+```
+
+## Contributing
+
+Foxglove Studio is written in TypeScript – contributions are welcome!
+
+Note: All contributors must agree to our [Contributor License Agreement](https://github.com/foxglove/cla). See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+
 ## Credits
 
 sviz is a fork of [Foxglove Studio](https://github.com/foxglove/studio), which originally began as a fork of [Webviz](https://github.com/cruise-automation/webviz), an open source project developed by [Cruise](https://getcruise.com/).

@@ -5,7 +5,6 @@
 import * as Comlink from "comlink";
 import * as R from "ramda";
 
-import { compare as compareTimes, subtract as subtractTimes, fromSec } from "@foxglove/rostime";
 import { Immutable } from "@foxglove/studio";
 import { iterateTyped } from "@foxglove/studio-base/components/Chart/datasets";
 import { RosPath } from "@foxglove/studio-base/components/MessagePathSyntax/constants";
@@ -162,7 +161,7 @@ function buildPlot(params: PlotParams, messages: Messages): PlotData {
   const { paths, invertedTheme, startTime, xAxisPath, xAxisVal } = params;
   return buildPlotData({
     invertedTheme,
-    paths: R.map((path) => [path, getPathData(messages, path)], paths),
+    paths: paths.map((path) => [path, getPathData(messages, path)]),
     startTime,
     xAxisPath,
     xAxisData: xAxisPath != undefined ? getPathData(messages, xAxisPath) : undefined,
@@ -392,20 +391,31 @@ function evictCache() {
   current = R.pick(topics, current);
 }
 
-function addBlock(block: Messages): void {
+function addBlock(block: Messages, resetTopics: string[]): void {
   const topics = R.keys(block);
-  blocks = R.mergeWith(R.concat, blocks, block);
+
+  blocks = R.pipe(
+    // Remove data for any topics that have been reset
+    R.omit(resetTopics),
+    // Merge the new block into the existing blocks
+    (newBlocks) => R.mergeWith(R.concat, newBlocks, block),
+  )(blocks);
 
   for (const client of R.values(clients)) {
     const { params } = client;
     const relevantTopics = R.intersection(topics, client.topics);
+    const shouldReset = R.intersection(relevantTopics, resetTopics).length > 0;
     if (params == undefined || isSingleMessage(params) || relevantTopics.length === 0) {
       continue;
     }
 
     mutateClient(client.id, {
       ...client,
-      blocks: accumulate(client.blocks, params, blocks),
+      blocks: accumulate(
+        shouldReset ? initAccumulated(client.topics) : client.blocks,
+        params,
+        blocks,
+      ),
     });
     client.queueRebuild();
   }
@@ -525,28 +535,20 @@ function updateView(id: string, view: PlotViewport): void {
   client.queueRebuild();
 }
 
-const CULL_THRESHOLD = fromSec(10);
+const MESSAGE_CULL_THRESHOLD = 15_000;
 
 function compressClients(): void {
   if (!isLive) {
     return;
   }
 
-  current = R.map((messages) => {
-    if (messages.length > 10000) {
-      return messages.slice(messages.length - 10000);
-    }
-
-    const start = messages.at(0)?.receiveTime;
-    const end = messages.at(-1)?.receiveTime;
-    if (end == undefined || start == undefined) {
-      return messages;
-    }
-
-    const cutoff = subtractTimes(end, CULL_THRESHOLD);
-    const index = R.findIndex(({ receiveTime }) => compareTimes(receiveTime, cutoff) > 0, messages);
-    return messages.slice(index);
-  }, current);
+  current = R.map(
+    (messages) =>
+      messages.length > MESSAGE_CULL_THRESHOLD
+        ? messages.slice(messages.length - MESSAGE_CULL_THRESHOLD)
+        : messages,
+    current,
+  );
 
   for (const client of R.values(clients)) {
     const { params } = client;

@@ -23,6 +23,7 @@ import {
   CustomWindowControls,
   CustomWindowControlsProps,
 } from "@foxglove/studio-base/components/AppBar/CustomWindowControls";
+import { BetaAppMenu } from "@foxglove/studio-base/components/BetaAppMenu";
 import { FoxgloveLogo } from "@foxglove/studio-base/components/FoxgloveLogo";
 import { MemoryUseIndicator } from "@foxglove/studio-base/components/MemoryUseIndicator";
 import Stack from "@foxglove/studio-base/components/Stack";
@@ -199,6 +200,9 @@ export function AppBar(props: AppBarProps): JSX.Element {
   const [enableMemoryUseIndicator = false] = useAppConfigurationValue<boolean>(
     AppSetting.ENABLE_MEMORY_USE_INDICATOR,
   );
+  const [enableNewAppMenu = false] = useAppConfigurationValue<boolean>(
+    AppSetting.ENABLE_NEW_APP_MENU,
+  );
 
   const hasCurrentLayout = useCurrentLayoutSelector(selectHasCurrentLayout);
 
@@ -243,20 +247,30 @@ export function AppBar(props: AppBarProps): JSX.Element {
                   primaryFill={theme.palette.common.white}
                 />
               </IconButton>
-              <AppMenu
-                open={appMenuOpen}
-                anchorEl={appMenuEl}
-                handleClose={() => {
-                  setAppMenuEl(undefined);
-                }}
-              />
+              {enableNewAppMenu ? (
+                <BetaAppMenu
+                  open={appMenuOpen}
+                  anchorEl={appMenuEl}
+                  handleClose={() => {
+                    setAppMenuEl(undefined);
+                  }}
+                />
+              ) : (
+                <AppMenu
+                  open={appMenuOpen}
+                  anchorEl={appMenuEl}
+                  handleClose={() => {
+                    setAppMenuEl(undefined);
+                  }}
+                />
+              )}
               <AppBarIconButton
                 className={cx({ "Mui-selected": panelMenuOpen })}
                 color="inherit"
                 disabled={!hasCurrentLayout}
                 id="add-panel-button"
                 data-tourid="add-panel-button"
-                title="Add panel"
+                title={t("addPanel")}
                 aria-label="Add panel button"
                 aria-controls={panelMenuOpen ? "add-panel-menu" : undefined}
                 aria-haspopup="true"
@@ -282,11 +296,11 @@ export function AppBar(props: AppBarProps): JSX.Element {
                 <AppBarIconButton
                   title={
                     <>
-                      {leftSidebarOpen ? "Hide" : "Show"} left sidebar{" "}
+                      {leftSidebarOpen ? t("hideLeftSidebar") : t("showLeftSidebar")}{" "}
                       <kbd className={classes.keyEquivalent}>[</kbd>
                     </>
                   }
-                  aria-label={`${leftSidebarOpen ? "Hide" : "Show"} left sidebar`}
+                  aria-label={`${leftSidebarOpen ? t("hideLeftSidebar") : t("showLeftSidebar")}`}
                   onClick={() => {
                     sidebarActions.left.setOpen(!leftSidebarOpen);
                   }}
@@ -297,11 +311,11 @@ export function AppBar(props: AppBarProps): JSX.Element {
                 <AppBarIconButton
                   title={
                     <>
-                      {rightSidebarOpen ? "Hide" : "Show"} right sidebar{" "}
+                      {rightSidebarOpen ? t("hideRightSidebar") : t("showRightSidebar")}{" "}
                       <kbd className={classes.keyEquivalent}>]</kbd>
                     </>
                   }
-                  aria-label={`${rightSidebarOpen ? "Hide" : "Show"} right sidebar`}
+                  aria-label={`${rightSidebarOpen ? t("hideRightSidebar") : t("showRightSidebar")}`}
                   onClick={() => {
                     sidebarActions.right.setOpen(!rightSidebarOpen);
                   }}

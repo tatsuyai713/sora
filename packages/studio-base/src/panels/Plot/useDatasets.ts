@@ -11,7 +11,10 @@ import { useShallowMemo, useDeepMemo } from "@foxglove/hooks";
 import { Immutable } from "@foxglove/studio";
 import { useMessageReducer as useCurrent, useDataSourceInfo } from "@foxglove/studio-base/PanelAPI";
 import { useBlocksSubscriptions as useBlocks } from "@foxglove/studio-base/PanelAPI/useBlocksSubscriptions";
-import { RosPath } from "@foxglove/studio-base/components/MessagePathSyntax/constants";
+import {
+  RosPath,
+  MessagePathPart,
+} from "@foxglove/studio-base/components/MessagePathSyntax/constants";
 import parseRosPath from "@foxglove/studio-base/components/MessagePathSyntax/parseRosPath";
 import {
   useMessagePipeline,
@@ -41,8 +44,11 @@ async function waitService(): Promise<Service> {
 
 const getIsLive = (ctx: MessagePipelineContext) => ctx.seekPlayback == undefined;
 
-// topic -> number of fields
-type BlockStatus = Record<string, number>;
+// We need to keep track of the block data we've already sent to the worker and
+// detect when it has changed, which can happen when the user changes a user
+// script or they trigger a subscription to different fields.
+// mapping from topic -> the first message on that topic in the block
+type BlockStatus = Record<string, unknown>;
 let blockStatus: BlockStatus[] = [];
 
 const getPayloadString = (payload: SubscribePayload): string =>
@@ -73,30 +79,58 @@ function normalizePaths(topics: SubscribePayload[]): SubscribePayload[] {
   )(topics);
 }
 
+/**
+ * Get the SubscribePayload for a single path by subscribing to all fields
+ * referenced in leading MessagePathFilters and the first field of the
+ * message.
+ */
+export function pathToPayload(path: RosPath): SubscribePayload | undefined {
+  const { messagePath: parts, topicName: topic } = path;
+
+  // We want to take _all_ of the filters that start the path, since these can
+  // be chained
+  const filters = R.takeWhile((part: MessagePathPart) => part.type === "filter", parts);
+  const firstField = R.find((part: MessagePathPart) => part.type === "name", parts);
+  if (firstField == undefined || firstField.type !== "name") {
+    return undefined;
+  }
+
+  return {
+    topic,
+    fields: R.pipe(
+      R.chain((part: MessagePathPart): string[] => {
+        if (part.type !== "filter") {
+          return [];
+        }
+        const { path: filterPath } = part;
+        const field = filterPath[0];
+        if (field == undefined) {
+          return [];
+        }
+
+        return [field];
+      }),
+      // Always subscribe to the header field
+      (filterFields) => [...filterFields, firstField.name, "header"],
+      R.uniq,
+    )(filters),
+  };
+}
+
 function getPayloadsFromPaths(paths: readonly string[]): SubscribePayload[] {
   return R.pipe(
-    // Parse all of the paths
-    R.chain((path: string) => {
+    R.chain((path: string): SubscribePayload[] => {
       const parsed = parseRosPath(path);
       if (parsed == undefined) {
         return [];
       }
 
-      return [parsed];
-    }),
-    // Then build field subscriptions
-    R.chain((path: RosPath): SubscribePayload[] => {
-      const field = R.head(path.messagePath);
-      if (field == undefined || field.type !== "name") {
+      const payload = pathToPayload(parsed);
+      if (payload == undefined) {
         return [];
       }
-      return [
-        {
-          topic: path.topicName,
-          // Always pull the header field for header stamps
-          fields: [field.name, "header"],
-        },
-      ];
+
+      return [payload];
     }),
     // Then simplify
     normalizePaths,
@@ -118,16 +152,7 @@ function chooseClient() {
   R.head(clientList)?.setter(topics);
 
   // Also clear the status of any topics we're no longer using
-  blockStatus = R.map((block) => R.pick(R.map(getPayloadString, topics), block), blockStatus);
-}
-
-function getNumFields(events: readonly MessageEvent[]): number {
-  const message = events[0]?.message;
-  if (message == undefined) {
-    return 0;
-  }
-
-  return Object.keys(message).length;
+  blockStatus = blockStatus.map((block) => R.pick(topics.map(getPayloadString), block));
 }
 
 // Subscribe to "current" messages (those near the seek head) and forward new
@@ -176,16 +201,21 @@ function useData(id: string, topics: SubscribePayload[]) {
   });
 
   const blocks = useBlocks(
-    React.useMemo(() => R.map((v) => ({ ...v, preloadType: "full" }), subscribed), [subscribed]),
+    React.useMemo(() => subscribed.map((v) => ({ ...v, preloadType: "full" })), [subscribed]),
   );
   useEffect(() => {
+    const wasReset: Record<string, boolean> = {};
+
     for (const [index, block] of blocks.entries()) {
       if (R.isEmpty(block)) {
-        break;
+        continue;
       }
 
       // Package any new messages into a single bundle to send to the worker
       const messages: Messages = {};
+      // Make a note of any topics that had new data so we can clear out
+      // accumulated points in the worker
+      const resetData: Set<string> = new Set<string>();
       const status: BlockStatus = blockStatus[index] ?? {};
       for (const payload of subscribed) {
         const ref = getPayloadString(payload);
@@ -194,19 +224,29 @@ function useData(id: string, topics: SubscribePayload[]) {
           continue;
         }
 
-        const numFields = getNumFields(topicMessages);
-        if (status[ref] === numFields) {
+        const first = topicMessages[0]?.message;
+        const existing = status[ref];
+        if (R.equals(existing, first)) {
           continue;
         }
 
-        status[ref] = numFields;
+        // we already had a message in this block, meaning the data itself has
+        // changed; we have to rebuild the plots
+        if (existing != undefined && wasReset[ref] == undefined) {
+          resetData.add(payload.topic);
+          wasReset[ref] = true;
+        }
+
+        status[ref] = first;
         messages[payload.topic] = topicMessages as MessageEvent[];
       }
       blockStatus[index] = status;
 
-      if (!R.isEmpty(messages)) {
-        void service?.addBlock(messages);
+      if (R.isEmpty(messages)) {
+        continue;
       }
+
+      void service?.addBlock(messages, Array.from(resetData));
     }
   }, [subscribed, blocks]);
 }

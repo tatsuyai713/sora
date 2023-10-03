@@ -2,8 +2,8 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { produce } from "immer";
 import * as _ from "lodash-es";
+import { useSnackbar } from "notistack";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { useLatest } from "react-use";
@@ -25,8 +25,11 @@ import {
 } from "@foxglove/studio";
 import { AppSetting } from "@foxglove/studio-base/AppSetting";
 import { BuiltinPanelExtensionContext } from "@foxglove/studio-base/components/PanelExtensionAdapter";
-import { ALL_SUPPORTED_IMAGE_SCHEMAS } from "@foxglove/studio-base/panels/ThreeDeeRender/renderables/ImageMode/ImageMode";
-import { ALL_SUPPORTED_ANNOTATION_SCHEMAS } from "@foxglove/studio-base/panels/ThreeDeeRender/renderables/ImageMode/annotations/ImageAnnotations";
+import { useAnalytics } from "@foxglove/studio-base/context/AnalyticsContext";
+import {
+  DEFAULT_SCENE_EXTENSION_CONFIG,
+  SceneExtensionConfig,
+} from "@foxglove/studio-base/panels/ThreeDeeRender/SceneExtensionConfig";
 import ThemeProvider from "@foxglove/studio-base/theme/ThemeProvider";
 
 import type {
@@ -36,6 +39,7 @@ import type {
   RendererConfig,
   RendererEvents,
   RendererSubscription,
+  TestOptions,
 } from "./IRenderer";
 import type { PickedRenderable } from "./Picker";
 import { SELECTED_ID_VARIABLE } from "./Renderable";
@@ -51,7 +55,7 @@ import {
   makePoseMessage,
 } from "./publish";
 import type { LayerSettingsTransform } from "./renderables/FrameAxes";
-import { PublishClickEvent } from "./renderables/PublishClickTool";
+import { PublishClickEventMap } from "./renderables/PublishClickTool";
 import { DEFAULT_PUBLISH_SETTINGS } from "./renderables/PublishSettings";
 import { InterfaceMode } from "./types";
 
@@ -100,13 +104,13 @@ function useRendererProperty<K extends keyof IRenderer>(
 export function ThreeDeeRender(props: {
   context: BuiltinPanelExtensionContext;
   interfaceMode: InterfaceMode;
-  /** Override default downloading behavior, used for Storybook */
-  onDownloadImage?: (blob: Blob, fileName: string) => void;
-  /** Enable hitmap debugging by default, used for picking stories */
-  debugPicking?: boolean;
+  testOptions: TestOptions;
+  /** Allow for injection or overriding of default extensions by custom extensions */
+  customSceneExtensions?: DeepPartial<SceneExtensionConfig>;
 }): JSX.Element {
-  const { context, interfaceMode, onDownloadImage, debugPicking } = props;
+  const { context, interfaceMode, testOptions, customSceneExtensions } = props;
   const { initialState, saveState, unstable_fetchAsset: fetchAsset } = context;
+  const analytics = useAnalytics();
 
   // Load and save the persisted panel configuration
   const [config, setConfig] = useState<Immutable<RendererConfig>>(() => {
@@ -145,9 +149,31 @@ export function ThreeDeeRender(props: {
   const [canvas, setCanvas] = useState<HTMLCanvasElement | ReactNull>(ReactNull);
   const [renderer, setRenderer] = useState<IRenderer | undefined>(undefined);
   const rendererRef = useRef<IRenderer | undefined>(undefined);
+
+  const { enqueueSnackbar } = useSnackbar();
+
+  const displayTemporaryError = useCallback(
+    (errorString: string) => {
+      enqueueSnackbar(errorString, { variant: "error" });
+    },
+    [enqueueSnackbar],
+  );
+
   useEffect(() => {
     const newRenderer = canvas
-      ? new Renderer({ canvas, config: configRef.current, interfaceMode, fetchAsset, debugPicking })
+      ? new Renderer({
+          canvas,
+          config: configRef.current,
+          interfaceMode,
+          fetchAsset,
+          sceneExtensionConfig: _.merge(
+            {},
+            DEFAULT_SCENE_EXTENSION_CONFIG,
+            customSceneExtensions ?? {},
+          ),
+          displayTemporaryError,
+          testOptions,
+        })
       : undefined;
     setRenderer(newRenderer);
     rendererRef.current = newRenderer;
@@ -159,52 +185,29 @@ export function ThreeDeeRender(props: {
     canvas,
     configRef,
     config.scene.transforms?.enablePreloading,
+    customSceneExtensions,
     interfaceMode,
     fetchAsset,
-    debugPicking,
+    testOptions,
+    displayTemporaryError,
   ]);
 
   useEffect(() => {
-    context.EXPERIMENTAL_setMessagePathDropConfig({
-      getDropStatus(paths) {
-        if (interfaceMode !== "image") {
-          return { canDrop: false };
-        }
-        let effect: "add" | "replace" = "add";
-        for (const path of paths) {
-          if (!path.isTopic || path.rootSchemaName == undefined) {
-            return { canDrop: false };
+    if (renderer) {
+      renderer.setAnalytics(analytics);
+    }
+  }, [renderer, analytics]);
+
+  useEffect(() => {
+    context.EXPERIMENTAL_setMessagePathDropConfig(
+      renderer
+        ? {
+            getDropStatus: renderer.getDropStatus,
+            handleDrop: renderer.handleDrop,
           }
-          if (ALL_SUPPORTED_IMAGE_SCHEMAS.has(path.rootSchemaName)) {
-            effect = "replace";
-          } else if (ALL_SUPPORTED_ANNOTATION_SCHEMAS.has(path.rootSchemaName)) {
-            // nothing to do
-          } else {
-            return { canDrop: false };
-          }
-        }
-        return { canDrop: true, effect };
-      },
-      handleDrop(paths) {
-        setConfig((prevConfig) =>
-          produce(prevConfig, (draft) => {
-            for (const path of paths) {
-              if (path.rootSchemaName == undefined) {
-                continue;
-              }
-              if (ALL_SUPPORTED_IMAGE_SCHEMAS.has(path.rootSchemaName)) {
-                draft.imageMode.imageTopic = path.path;
-              } else {
-                draft.imageMode.annotations ??= {};
-                draft.imageMode.annotations[path.path] ??= {};
-                draft.imageMode.annotations[path.path]!.visible = true;
-              }
-            }
-          }),
-        );
-      },
-    });
-  }, [context, interfaceMode]);
+        : undefined,
+    );
+  }, [context, renderer]);
 
   const [colorScheme, setColorScheme] = useState<"dark" | "light" | undefined>();
   const [timezone, setTimezone] = useState<string | undefined>();
@@ -686,7 +689,7 @@ export function ThreeDeeRender(props: {
     const onStart = () => {
       setPublishActive(true);
     };
-    const onSubmit = (event: PublishClickEvent & { type: "foxglove.publish-submit" }) => {
+    const onSubmit = (event: PublishClickEventMap["foxglove.publish-submit"]) => {
       const frameId = renderer?.followFrameId;
       if (frameId == undefined) {
         log.warn("Unable to publish, renderFrameId is not set");
@@ -816,7 +819,6 @@ export function ThreeDeeRender(props: {
               renderer?.publishClickTool.start();
             }}
             timezone={timezone}
-            onDownloadImage={onDownloadImage}
           />
         </RendererContext.Provider>
       </div>

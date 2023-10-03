@@ -83,8 +83,9 @@ export class OccupancyGridRenderable extends Renderable<OccupancyGridUserData> {
 }
 
 export class OccupancyGrids extends SceneExtension<OccupancyGridRenderable> {
-  public constructor(renderer: IRenderer) {
-    super("foxglove.OccupancyGrids", renderer);
+  public static extensionId = "foxglove.OccupancyGrids";
+  public constructor(renderer: IRenderer, name: string = OccupancyGrids.extensionId) {
+    super(name, renderer);
   }
 
   public override getSubscriptions(): readonly AnyRendererSubscription[] {
@@ -336,7 +337,7 @@ function createTexture(occupancyGrid: OccupancyGrid): THREE.DataTexture {
     THREE.NearestFilter,
     THREE.LinearFilter,
     1,
-    THREE.LinearEncoding, // OccupancyGrid carries linear grayscale values, not sRGB
+    THREE.LinearSRGBColorSpace, // OccupancyGrid carries linear-sRGB grayscale values, not sRGB
   );
   texture.generateMipmaps = false;
   return texture;

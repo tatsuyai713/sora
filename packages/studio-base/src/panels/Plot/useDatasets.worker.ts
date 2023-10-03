@@ -7,7 +7,6 @@ import * as R from "ramda";
 
 import { Immutable } from "@foxglove/studio";
 import { iterateTyped } from "@foxglove/studio-base/components/Chart/datasets";
-import { RosPath } from "@foxglove/studio-base/components/MessagePathSyntax/constants";
 import { messagePathStructures } from "@foxglove/studio-base/components/MessagePathSyntax/messagePathsForDatatype";
 import parseRosPath from "@foxglove/studio-base/components/MessagePathSyntax/parseRosPath";
 import { fillInGlobalVariablesInPath } from "@foxglove/studio-base/components/MessagePathSyntax/useCachedGetMessagePathDataItems";
@@ -21,6 +20,7 @@ import { GlobalVariables } from "@foxglove/studio-base/hooks/useGlobalVariables"
 import { Topic, MessageEvent } from "@foxglove/studio-base/players/types";
 import { RosDatatypes } from "@foxglove/studio-base/types/RosDatatypes";
 import { enumValuesByDatatypeAndField } from "@foxglove/studio-base/util/enums";
+import strPack from "@foxglove/studio-base/util/strPack";
 
 import { resolveTypedIndices } from "./datasets";
 import {
@@ -31,9 +31,9 @@ import {
   TypedData,
   Messages,
 } from "./internalTypes";
+import { isSingleMessage, getParamPaths, getParamTopics } from "./params";
 import {
   buildPlotData,
-  getPaths,
   resolvePath,
   appendPlotData,
   reducePlotData,
@@ -51,11 +51,6 @@ type Cursors = Record<string, number>;
 type Accumulated = {
   cursors: Cursors;
   data: PlotData;
-};
-
-type ParsedPath = {
-  parsed: RosPath;
-  value: string;
 };
 
 type Client = {
@@ -108,40 +103,6 @@ function getNewMessages(
   }
 
   return [newCursors, newMessages];
-}
-
-function getParamPaths(params: PlotParams): readonly string[] {
-  return getPaths(params.paths, params.xAxisPath);
-}
-
-function getParamTopics(params: PlotParams): readonly string[] {
-  return R.pipe(
-    R.chain((path: string): ParsedPath[] => {
-      const parsed = parseRosPath(path);
-      if (parsed == undefined) {
-        return [];
-      }
-
-      return [
-        {
-          parsed,
-          value: path,
-        },
-      ];
-    }),
-    R.map((v: ParsedPath) => v.parsed.topicName),
-    R.uniq,
-  )(getParamPaths(params));
-}
-
-function isSingleMessage(params: PlotParams): boolean {
-  const { xAxisVal } = params;
-  return xAxisVal === "currentCustom" || xAxisVal === "index";
-}
-
-function isBounded(params: PlotParams): boolean {
-  const { followingViewWidth } = params;
-  return followingViewWidth != undefined && followingViewWidth > 0;
 }
 
 function getPathData(messages: Messages, path: BasePlotPath): PlotDataItem[] | undefined {
@@ -235,10 +196,7 @@ function getClientData(client: Client): PlotData | undefined {
   const { bounds: currentBounds } = currentData;
 
   let datasets: PlotData[] = [];
-  if (isSingleMessage(params) || isBounded(params)) {
-    // bounded and single-message plots _only_ use current data
-    datasets = [currentData];
-  } else if (blockBounds.x.min <= currentBounds.x.min && blockBounds.x.max > currentBounds.x.max) {
+  if (blockBounds.x.min <= currentBounds.x.min && blockBounds.x.max > currentBounds.x.max) {
     // ignore current data if block data covers it already
     datasets = [blockData];
   } else {
@@ -317,15 +275,16 @@ function setLive(value: boolean): void {
 function unregister(id: string): void {
   const { [id]: _client, ...rest } = clients;
   clients = rest;
+  evictCache();
 }
 
 function receiveMetadata(topics: readonly Topic[], datatypes: Immutable<RosDatatypes>): void {
-  metadata = {
+  metadata = strPack({
     topics,
     datatypes,
     enumValues: enumValuesByDatatypeAndField(datatypes),
     structures: messagePathStructures(datatypes),
-  };
+  });
 }
 
 function refreshClient(id: string) {
@@ -398,7 +357,7 @@ function addBlock(block: Messages, resetTopics: string[]): void {
     // Remove data for any topics that have been reset
     R.omit(resetTopics),
     // Merge the new block into the existing blocks
-    (newBlocks) => R.mergeWith(R.concat, newBlocks, block),
+    (newBlocks) => R.mergeWith(R.concat, newBlocks, strPack(block)),
   )(blocks);
 
   for (const client of R.values(clients)) {
@@ -419,8 +378,6 @@ function addBlock(block: Messages, resetTopics: string[]): void {
     });
     client.queueRebuild();
   }
-
-  evictCache();
 }
 
 function clearCurrent(): void {
@@ -496,8 +453,6 @@ function addCurrent(events: readonly MessageEvent[]): void {
     }
 
     const newData = buildPlot(params, newMessages);
-    client.addPartial?.(getProvidedData(newData));
-
     mutateClient(client.id, {
       ...client,
       current: {

@@ -11,7 +11,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import { Edit16Filled } from "@fluentui/react-icons";
+import { Add16Filled, Edit16Filled } from "@fluentui/react-icons";
 import { Button, Typography } from "@mui/material";
 import { ChartOptions, ScaleOptions } from "chart.js";
 import * as _ from "lodash-es";
@@ -47,11 +47,11 @@ import { SubscribePayload } from "@foxglove/studio-base/players/types";
 import { OnClickArg as OnChartClickArgs } from "@foxglove/studio-base/src/components/Chart";
 import { Bounds } from "@foxglove/studio-base/types/Bounds";
 import { OpenSiblingPanel, PanelConfig, SaveConfig } from "@foxglove/studio-base/types/panels";
-import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
+import { fontMonospace } from "@foxglove/theme";
 
 import messagesToDatasets from "./messagesToDatasets";
 import { useStateTransitionsPanelSettings } from "./settings";
-import { stateTransitionPathDisplayName } from "./shared";
+import { DEFAULT_PATH, stateTransitionPathDisplayName } from "./shared";
 import { StateTransitionConfig } from "./types";
 
 export const transitionableRosTypes = [
@@ -68,7 +68,6 @@ export const transitionableRosTypes = [
   "json",
 ];
 
-const fontFamily = fonts.MONOSPACE;
 const fontSize = 10;
 const fontWeight = "bold";
 const EMPTY_ITEMS_BY_PATH: MessageDataItemsByPath = {};
@@ -125,7 +124,7 @@ const plugins: ChartOptions["plugins"] = {
     offset: 0,
     clip: true,
     font: {
-      family: fontFamily,
+      family: fontMonospace,
       size: fontSize,
       weight: fontWeight,
     },
@@ -205,9 +204,7 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
           paths: [
             // If there was only a single series and its path was empty (the default state of the
             // panel), replace the series rather than adding to it
-            ...(prevConfig.paths.length === 1 && prevConfig.paths[0]?.value === ""
-              ? []
-              : prevConfig.paths),
+            ...prevConfig.paths,
             ...draggedPaths.map((path) => ({
               value: path.path,
               enabled: true,
@@ -449,14 +446,14 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
           />
 
           <Stack className={classes.chartOverlay} position="absolute" paddingTop={0.5}>
-            {paths.map((path, index) => (
+            {(paths.length === 0 ? [DEFAULT_PATH] : paths).map((path, index) => (
               <div className={classes.row} key={index} style={{ height: heightPerTopic }}>
                 <Button
                   size="small"
                   color="inherit"
                   data-testid="edit-topic-button"
                   className={classes.button}
-                  endIcon={<Edit16Filled />}
+                  endIcon={paths.length === 0 ? <Add16Filled /> : <Edit16Filled />}
                   onClick={() => {
                     setSelectedPanelIds([panelId]);
                     openPanelSettings();
@@ -464,7 +461,7 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
                   }}
                 >
                   <Typography variant="inherit" noWrap>
-                    {stateTransitionPathDisplayName(path, index)}
+                    {stateTransitionPathDisplayName(path, "Click to add a series")}
                   </Typography>
                 </Button>
               </div>
@@ -477,7 +474,7 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
 });
 
 const defaultConfig: StateTransitionConfig = {
-  paths: [{ value: "", timestampMethod: "receiveTime" }],
+  paths: [],
   isSynced: true,
 };
 export default Panel(

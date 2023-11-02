@@ -7,7 +7,7 @@
   <br />
   <br />
 
-sviz is an integrated visualization and diagnosis tool for robotics, available [in your browser](https://sviz.metaverseindustries.llc/).
+[sviz](https://github.com/MetaverseIndustries/sviz) is an integrated visualization and diagnosis tool for robotics.
 
   <p align="center">
     <a href="https://sviz.metaverseindustries.llc"><img alt="sviz screenshot" src="/resources/screenshot.png"></a>

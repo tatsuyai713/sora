@@ -441,8 +441,11 @@ export const DownloadRawImage: StoryObj<React.ComponentProps<typeof ImageModeFox
   args: { imageType: "raw" },
   play: async () => {
     const { click, pointer } = userEvent.setup();
+    // need to wait until the images are done decoding
+    await delay(300);
     await pointer({ target: document.querySelector("canvas")!, keys: "[MouseRight]" });
-    await click(await screen.findByText("Download image"));
+    const downloadButton = await screen.findByText("Download image");
+    await click(downloadButton);
   },
 };
 
@@ -693,8 +696,8 @@ export const UnsupportedEncodingError: StoryObj = {
   play: async () => {
     const errorIcon = await waitFor(async () => {
       const icons = await screen.findAllByTestId("ErrorIcon");
-      if (icons.length !== 2) {
-        throw new Error("Expected 2 error icons");
+      if (icons.length !== 1) {
+        throw new Error("Expected 1 error icon. (unsupported encoding)");
       }
       return icons[0];
     });
@@ -736,8 +739,8 @@ export const DecompressionError: StoryObj = {
   play: async () => {
     const errorIcon = await waitFor(async () => {
       const icons = await screen.findAllByTestId("ErrorIcon");
-      if (icons.length !== 2) {
-        throw new Error("Expected 2 error icons");
+      if (icons.length !== 1) {
+        throw new Error("Expected 1 error icon (decompression error)");
       }
       return icons[0];
     });

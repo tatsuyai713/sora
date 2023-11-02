@@ -624,64 +624,78 @@ export default class FoxgloveWebSocketPlayer implements Player {
       }
 
       for (const service of services) {
-        let requestType: string, responseType: string;
-        if (this.#serviceCallEncoding === "cbuf") {
-          // cbuf services separate the request and response schema types with a semi-colon
-          const parts = service.type.split(";");
-          if (parts.length !== 2) {
-            throw new Error(
-              `Invalid cbuf service type "${service.type}", expected single semi-colon delimiter`,
-            );
+        const serviceProblemId = `service:${service.id}`;
+        try {
+          let requestType: string, responseType: string;
+          if (this.#serviceCallEncoding === "cbuf") {
+            // cbuf services separate the request and response schema types with a semi-colon
+            const parts = service.type.split(";");
+            if (parts.length !== 2) {
+              throw new Error(
+                `Invalid cbuf service type "${service.type}", expected single semi-colon delimiter`,
+              );
+            }
+            requestType = parts[0]!;
+            responseType = parts[1]!;
+          } else {
+            // Assume ROS-style service definition, where the request and response types are
+            // suffixed with "_Request" and "_Response"
+            requestType = `${service.type}_Request`;
+            responseType = `${service.type}_Response`;
           }
-          requestType = parts[0]!;
-          responseType = parts[1]!;
-        } else {
-          // Assume ROS-style service definition, where the request and response types are
-          // suffixed with "_Request" and "_Response"
-          requestType = `${service.type}_Request`;
-          responseType = `${service.type}_Response`;
+          const parsedRequest = parseChannel({
+            messageEncoding: this.#serviceCallEncoding,
+            schema: {
+              name: requestType,
+              encoding: schemaEncoding,
+              data: textEncoder.encode(service.requestSchema),
+            },
+          });
+          const parsedResponse = parseChannel({
+            messageEncoding: this.#serviceCallEncoding,
+            schema: {
+              name: responseType,
+              encoding: schemaEncoding,
+              data: textEncoder.encode(service.responseSchema),
+            },
+          });
+          const requestMsgDef = rosDatatypesToMessageDefinition(
+            parsedRequest.datatypes,
+            requestType,
+          );
+          const requestMessageWriter =
+            this.#serviceCallEncoding === "cbuf"
+              ? new CbufMessageWriter(service.requestSchema, requestType)
+              : ROS_ENCODINGS.includes(this.#serviceCallEncoding)
+              ? this.#serviceCallEncoding === "ros1"
+                ? new Ros1MessageWriter(requestMsgDef)
+                : new Ros2MessageWriter(requestMsgDef)
+              : new JsonMessageWriter();
+
+          // Add type definitions for service response and request
+          this.#updateDataTypes(parsedRequest.datatypes);
+          this.#updateDataTypes(parsedResponse.datatypes);
+
+          const resolvedService: ResolvedService = {
+            service,
+            parsedResponse,
+            requestMessageWriter,
+          };
+          this.#servicesByName.set(service.name, resolvedService);
+          this.#problems.removeProblem(serviceProblemId);
+        } catch (error) {
+          this.#problems.addProblem(serviceProblemId, {
+            severity: "error",
+            message: `Failed to parse service ${service.name}`,
+            error,
+          });
         }
-        const parsedRequest = parseChannel({
-          messageEncoding: this.#serviceCallEncoding,
-          schema: {
-            name: requestType,
-            encoding: schemaEncoding,
-            data: textEncoder.encode(service.requestSchema),
-          },
-        });
-        const parsedResponse = parseChannel({
-          messageEncoding: this.#serviceCallEncoding,
-          schema: {
-            name: responseType,
-            encoding: schemaEncoding,
-            data: textEncoder.encode(service.responseSchema),
-          },
-        });
-        const requestMsgDef = rosDatatypesToMessageDefinition(parsedRequest.datatypes, requestType);
-        const requestMessageWriter =
-          this.#serviceCallEncoding === "cbuf"
-            ? new CbufMessageWriter(service.requestSchema, requestType)
-            : ROS_ENCODINGS.includes(this.#serviceCallEncoding)
-            ? this.#serviceCallEncoding === "ros1"
-              ? new Ros1MessageWriter(requestMsgDef)
-              : new Ros2MessageWriter(requestMsgDef)
-            : new JsonMessageWriter();
-
-        // Add type definitions for service response and request
-        this.#updateDataTypes(parsedRequest.datatypes);
-        this.#updateDataTypes(parsedResponse.datatypes);
-
-        const resolvedService: ResolvedService = {
-          service,
-          parsedResponse,
-          requestMessageWriter,
-        };
-        this.#servicesByName.set(service.name, resolvedService);
       }
       this.#emitState();
     });
 
     this.#client.on("unadvertiseServices", (serviceIds) => {
+      let needsStateUpdate = false;
       for (const serviceId of serviceIds) {
         const service: ResolvedService | undefined = Object.values(this.#servicesByName).find(
           (srv) => srv.service.id === serviceId,
@@ -689,6 +703,11 @@ export default class FoxgloveWebSocketPlayer implements Player {
         if (service) {
           this.#servicesByName.delete(service.service.name);
         }
+        const serviceProblemId = `service:${serviceId}`;
+        needsStateUpdate = this.#problems.removeProblem(serviceProblemId) || needsStateUpdate;
+      }
+      if (needsStateUpdate) {
+        this.#emitState();
       }
     });
 

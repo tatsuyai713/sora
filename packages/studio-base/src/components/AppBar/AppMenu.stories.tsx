@@ -7,7 +7,6 @@ import { Meta, StoryObj } from "@storybook/react";
 import { userEvent, within } from "@storybook/testing-library";
 import * as _ from "lodash-es";
 
-import { AppBarMenuItem } from "@foxglove/studio-base/components/AppBar/types";
 import { AppContext } from "@foxglove/studio-base/context/AppContext";
 import PlayerSelectionContext, {
   PlayerSelection,
@@ -16,6 +15,7 @@ import MockCurrentLayoutProvider from "@foxglove/studio-base/providers/CurrentLa
 import WorkspaceContextProvider from "@foxglove/studio-base/providers/WorkspaceContextProvider";
 
 import { AppMenu } from "./AppMenu";
+import { AppBarMenuItem } from "./types";
 
 type StoryArgs = {
   handleClose: () => void;
@@ -70,7 +70,7 @@ const playerSelection: PlayerSelection = {
     { id: "2222", title: "http://localhost:11311", label: "ROS 1" },
     { id: "3333", title: "ws://localhost:9090/", label: "Rosbridge (ROS 1 & 2)" },
     { id: "4444", title: "ws://localhost:8765", label: "Foxglove WebSocket" },
-    { id: "5555", title: "2369", label: "Velodyne Lidar" },
+    { id: "5555", title: "ws://1.2.3.4:8765", label: "Foxglove WebSocket" },
     { id: "6666", title: "THIS ITEM SHOULD BE HIDDEN IN STORYBOOKS", label: "!!!!!!!!!!!!" },
   ],
   availableSources: [],

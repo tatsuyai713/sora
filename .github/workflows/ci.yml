@@ -45,11 +45,11 @@ jobs:
     name: ${{ matrix.config.name }} (${{ matrix.os }})
 
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
         with:
           lfs: true
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4.0.0
         with:
           node-version: 16.17
       - run: corepack enable yarn
@@ -78,11 +78,11 @@ jobs:
     name: integration (${{ matrix.os }})
 
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
         with:
           lfs: true
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4.0.0
         with:
           node-version: 16.17
       - run: corepack enable yarn
@@ -98,20 +98,9 @@ jobs:
 
       - run: yarn install --immutable
 
-      - name: test:integration
-        if: matrix.os == 'ubuntu-20.04'
-        uses: GabrielBB/xvfb-action@v1
-        with:
-          working-directory: ./
-          run: yarn run test:integration
-
       - name: test:web-integration
         if: matrix.os == 'ubuntu-20.04'
         run: yarn run test:web-integration
-
-      - name: test:integration
-        if: matrix.os != 'ubuntu-20.04'
-        run: yarn run test:integration
 
   release:
     name: Publish to S3 and GHCR

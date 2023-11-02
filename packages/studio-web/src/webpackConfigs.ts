@@ -8,7 +8,10 @@ import CopyPlugin from "copy-webpack-plugin";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 import path from "path";
 import { Configuration, WebpackPluginInstance } from "webpack";
-import type { Configuration as WebpackDevServerConfiguration } from "webpack-dev-server";
+import type {
+  ConnectHistoryApiFallbackOptions,
+  Configuration as WebpackDevServerConfiguration,
+} from "webpack-dev-server";
 
 import type { WebpackArgv } from "@foxglove/studio-base/WebpackArgv";
 import { makeConfig } from "@foxglove/studio-base/webpack";
@@ -23,10 +26,15 @@ export type ConfigParams = {
   contextPath: string;
   entrypoint: string;
   outputPath: string;
+  publicPath?: string;
   /** Source map (`devtool`) setting to use for production builds */
   prodSourceMap: string | false;
   /** Set the app version information */
   version: string;
+  /** Needs to be overridden for react-router */
+  historyApiFallback?: ConnectHistoryApiFallbackOptions;
+  /** Customizations to index.html */
+  indexHtmlOptions?: Partial<HtmlWebpackPlugin.Options>;
 };
 
 export const devServerConfig = (params: ConfigParams): WebpackConfiguration => ({
@@ -35,7 +43,7 @@ export const devServerConfig = (params: ConfigParams): WebpackConfiguration => (
 
   // Output path must be specified here for HtmlWebpackPlugin within render config to work
   output: {
-    publicPath: "",
+    publicPath: params.publicPath ?? "",
     path: params.outputPath,
   },
 
@@ -43,6 +51,7 @@ export const devServerConfig = (params: ConfigParams): WebpackConfiguration => (
     static: {
       directory: params.outputPath,
     },
+    historyApiFallback: params.historyApiFallback,
     hot: true,
     // The problem and solution are described at <https://github.com/webpack/webpack-dev-server/issues/1604>.
     // When running in dev mode two errors are logged to the dev console:
@@ -50,6 +59,11 @@ export const devServerConfig = (params: ConfigParams): WebpackConfiguration => (
     //  "[WDS] Disconnected!"
     // Since we are only connecting to localhost, DNS rebinding attacks are not a concern during dev
     allowedHosts: "all",
+    headers: {
+      // Enable cross-origin isolation: https://resourcepolicy.fyi
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-embedder-policy": "credentialless",
+    },
   },
 
   plugins: [new CleanWebpackPlugin()],
@@ -85,7 +99,7 @@ export const mainConfig =
       devtool: isDev ? "eval-cheap-module-source-map" : params.prodSourceMap,
 
       output: {
-        publicPath: "auto",
+        publicPath: params.publicPath ?? "auto",
 
         // Output filenames should include content hashes in order to cache bust when new versions are available
         filename: isDev ? "[name].js" : "[name].[contenthash].js",
@@ -100,22 +114,13 @@ export const mainConfig =
           patterns: [{ from: path.resolve(__dirname, "..", "public") }],
         }),
         new HtmlWebpackPlugin({
-          templateContent: `
+          templateContent: ({ htmlWebpackPlugin }) => `
   <!doctype html>
   <html>
     <head>
       <meta charset="utf-8">
       <meta name="apple-mobile-web-app-capable" content="yes">
-      <meta property="og:title" content="sviz"/>
-      <meta property="og:description" content="Open source visualization and debugging tool for robotics"/>
-      <meta property="og:type" content="website"/>
-      <meta property="og:image" content="https://foxglove.dev/images/og-image.jpeg"/>
-      <meta property="og:url" content="https://sviz.metaverseindustries.llc/"/>
-      <meta name="twitter:card" content="summary_large_image"/>
-      <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-      <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
-      <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
-      <title>sviz</title>
+      ${htmlWebpackPlugin.options.foxgloveExtraHeadTags}
       <style type="text/css" id="loading-styles">
         body {
           margin: 0;
@@ -143,6 +148,13 @@ export const mainConfig =
     </body>
   </html>
   `,
+          foxgloveExtraHeadTags: `
+            <title>sviz</title>
+            <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+            <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+            <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+          `,
+          ...params.indexHtmlOptions,
         }),
       ],
     };

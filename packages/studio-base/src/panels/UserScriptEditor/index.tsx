@@ -43,7 +43,10 @@ import {
   useCurrentLayoutActions,
   useCurrentLayoutSelector,
 } from "@foxglove/studio-base/context/CurrentLayoutContext";
-import { useUserScriptState } from "@foxglove/studio-base/context/UserScriptStateContext";
+import {
+  UserScriptStore,
+  useUserScriptState,
+} from "@foxglove/studio-base/context/UserScriptStateContext";
 import BottomBar from "@foxglove/studio-base/panels/UserScriptEditor/BottomBar";
 import { Sidebar } from "@foxglove/studio-base/panels/UserScriptEditor/Sidebar";
 import { usePanelSettingsTreeUpdate } from "@foxglove/studio-base/providers/PanelStateContextProvider";
@@ -179,6 +182,8 @@ const EMPTY_USER_NODES: UserScripts = Object.freeze({});
 const selectUserScripts = (state: LayoutState) =>
   state.selectedLayout?.data?.userNodes ?? EMPTY_USER_NODES;
 
+const selectState = (store: UserScriptStore) => store.state;
+
 function UserScriptEditor(props: Props) {
   const { config, saveConfig } = props;
   const { classes, theme } = useStyles();
@@ -186,9 +191,7 @@ function UserScriptEditor(props: Props) {
   const updatePanelSettingsTree = usePanelSettingsTreeUpdate();
 
   const userScripts = useCurrentLayoutSelector(selectUserScripts);
-  const {
-    state: { scriptStates: userScriptStates, rosLib, typesLib },
-  } = useUserScriptState();
+  const { scriptStates: userScriptStates, rosLib, typesLib } = useUserScriptState(selectState);
 
   const { setUserScripts } = useCurrentLayoutActions();
 
@@ -397,7 +400,7 @@ function UserScriptEditor(props: Props) {
             </Stack>
           )}
 
-          <PanelGroup direction="vertical" units="pixels">
+          <PanelGroup direction="vertical" units="percentages">
             {selectedNodeId == undefined && <WelcomeScreen addNewNode={addNewNode} />}
             <ResizablePanel>
               <Suspense
@@ -434,9 +437,9 @@ function UserScriptEditor(props: Props) {
             <PanelResizeHandle className={classes.resizeHandle} />
             <ResizablePanel
               collapsible
-              minSize={38}
-              collapsedSize={38}
-              defaultSize={38}
+              collapsedSize={0}
+              defaultSize={30}
+              style={{ minHeight: "38px" }}
               ref={bottomBarRef}
             >
               <BottomBar

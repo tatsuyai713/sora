@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogActions,
   DialogProps,
+  DialogTitle,
   IconButton,
   Link,
   Tab,
@@ -113,6 +114,12 @@ const useStyles = makeStyles()((theme) => ({
       borderRadius: theme.shape.borderRadius,
     },
   },
+  dialogTitle: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: theme.typography.h3.fontSize,
+  },
 }));
 
 type SectionKey = "resources" | "products" | "contact" | "legal";
@@ -206,20 +213,12 @@ export function AppSettingsDialog(
 
   return (
     <Dialog {...props} fullWidth maxWidth="md">
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        paddingX={3}
-        paddingY={2}
-      >
-        <Typography variant="h3" fontWeight={600}>
-          {t("settings")}
-        </Typography>
+      <DialogTitle className={classes.dialogTitle}>
+        {t("settings")}
         <IconButton edge="end" onClick={handleClose}>
           <CloseIcon />
         </IconButton>
-      </Stack>
+      </DialogTitle>
       <div className={classes.layoutGrid}>
         <Tabs
           classes={{ indicator: classes.indicator }}

@@ -57,7 +57,6 @@ import {
 import { useAppConfigurationValue } from "@foxglove/studio-base/hooks";
 import { useDefaultWebLaunchPreference } from "@foxglove/studio-base/hooks/useDefaultWebLaunchPreference";
 import useElectronFilesToOpen from "@foxglove/studio-base/hooks/useElectronFilesToOpen";
-import useNativeAppMenuEvent from "@foxglove/studio-base/hooks/useNativeAppMenuEvent";
 import { PlayerPresence } from "@foxglove/studio-base/players/types";
 import { PanelStateContextProvider } from "@foxglove/studio-base/providers/PanelStateContextProvider";
 import WorkspaceContextProvider from "@foxglove/studio-base/providers/WorkspaceContextProvider";
@@ -169,6 +168,7 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
     }
   }, []);
 
+<<<<<<< HEAD
   useNativeAppMenuEvent(
     "open",
     useCallback(async () => {
@@ -215,6 +215,8 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
     window.open("https://foxglove.dev/docs", "_blank");
   });
 
+=======
+>>>>>>> 1eac08f1b (Bring sviz in parity with Foxglove Studio 1.78.0 (#12))
   const { enqueueSnackbar } = useSnackbar();
 
   const installExtension = useExtensionCatalog((state) => state.installExtension);

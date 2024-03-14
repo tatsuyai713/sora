@@ -6,9 +6,11 @@ import { TypeOptions } from "i18next";
 
 export const appSettings: Partial<TypeOptions["resources"]["appSettings"]> = {
   about: "情報",
+  advanced: undefined,
   askEachTime: "毎回確認する",
   colorScheme: "カラースキーム",
   dark: "ダーク",
+  debugModeDescription: undefined,
   desktopApp: "デスクトップアプリ",
   displayTimestampsIn: "タイムスタンプを表示",
   experimentalFeatures: "実験的機能",
@@ -25,8 +27,6 @@ export const appSettings: Partial<TypeOptions["resources"]["appSettings"]> = {
   noExperimentalFeatures: "現在、実験的機能はありません。",
   ros: "ROS",
   settings: "設定",
-  studioDebugPanels: undefined,
-  studioDebugPanelsDescription: undefined,
   timestampFormat: "タイムスタンプ形式",
   webApp: "ウェブアプリ",
 };

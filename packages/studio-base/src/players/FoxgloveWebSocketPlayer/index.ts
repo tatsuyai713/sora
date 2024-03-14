@@ -50,6 +50,7 @@ import {
   BinaryOpcode,
 } from "@foxglove/ws-protocol";
 
+import { CbufMessageWriter } from "./CbufMessageWriter";
 import { JsonMessageWriter } from "./JsonMessageWriter";
 import { MessageWriter } from "./MessageWriter";
 import WorkerSocketAdapter from "./WorkerSocketAdapter";
@@ -65,9 +66,9 @@ const ZERO_TIME = Object.freeze({ sec: 0, nsec: 0 });
 const GET_ALL_PARAMS_REQUEST_ID = "get-all-params";
 const GET_ALL_PARAMS_PERIOD_MS = 15000;
 const ROS_ENCODINGS = ["ros1", "cdr"];
-const SUPPORTED_PUBLICATION_ENCODINGS = ["json", ...ROS_ENCODINGS];
+const SUPPORTED_PUBLICATION_ENCODINGS = ["json", "cbuf", ...ROS_ENCODINGS];
 const FALLBACK_PUBLICATION_ENCODING = "json";
-const SUPPORTED_SERVICE_ENCODINGS = ["json", ...ROS_ENCODINGS];
+const SUPPORTED_SERVICE_ENCODINGS = ["json", "cbuf", ...ROS_ENCODINGS];
 
 type ResolvedChannel = { channel: Channel; parsedChannel: ParsedChannel };
 type Publication = ClientChannel & { messageWriter?: Ros1MessageWriter | Ros2MessageWriter };
@@ -440,6 +441,12 @@ export default class FoxgloveWebSocketPlayer implements Player {
           ) {
             schemaEncoding = channel.schemaEncoding ?? "ros2msg";
             schemaData = textEncoder.encode(channel.schema);
+          } else if (
+            channel.encoding === "cbuf" &&
+            (channel.schemaEncoding == undefined || channel.schemaEncoding === "cbuf")
+          ) {
+            schemaEncoding = channel.schemaEncoding ?? "cbuf";
+            schemaData = textEncoder.encode(channel.schema);
           } else {
             const msg = channel.schemaEncoding
               ? `Unsupported combination of message / schema encoding: (${channel.encoding} / ${channel.schemaEncoding})`
@@ -637,47 +644,94 @@ export default class FoxgloveWebSocketPlayer implements Player {
         return;
       }
 
-      let schemaEncoding: string;
+      let defaultSchemaEncoding = "";
       if (this.#serviceCallEncoding === "json") {
-        schemaEncoding = "jsonschema";
+        defaultSchemaEncoding = "jsonschema";
       } else if (this.#serviceCallEncoding === "ros1") {
-        schemaEncoding = "ros1msg";
+        defaultSchemaEncoding = "ros1msg";
       } else if (this.#serviceCallEncoding === "cdr") {
-        schemaEncoding = "ros2msg";
+        defaultSchemaEncoding = "ros2msg";
+      } else if (this.#serviceCallEncoding === "cbuf") {
+        defaultSchemaEncoding = "cbuf";
       } else {
         throw new Error(`Unsupported encoding "${this.#serviceCallEncoding}"`);
       }
 
       for (const service of services) {
         const serviceProblemId = `service:${service.id}`;
+        const requestMsgEncoding = service.request?.encoding ?? this.#serviceCallEncoding;
+        const responseMsgEncoding = service.response?.encoding ?? this.#serviceCallEncoding;
+        const requestSchema = service.request?.schema ?? service.requestSchema;
+        const responseSchema = service.response?.schema ?? service.responseSchema;
+
         try {
-          const requestType = `${service.type}_Request`;
-          const responseType = `${service.type}_Response`;
+          if (requestSchema == undefined || responseSchema == undefined) {
+            throw new Error("Invalid service definition, at least one required field is missing");
+          } else if (
+            !defaultSchemaEncoding &&
+            (service.request == undefined || service.response == undefined)
+          ) {
+            throw new Error("Cannot determine service request or response schema encoding");
+          } else if (!SUPPORTED_SERVICE_ENCODINGS.includes(requestMsgEncoding)) {
+            const supportedEncodingsStr = SUPPORTED_SERVICE_ENCODINGS.join(", ");
+            throw new Error(
+              `Unsupported service request message encoding. ${requestMsgEncoding} not in list of supported encodings [${supportedEncodingsStr}]`,
+            );
+          }
+
+          let requestType: string, responseType: string;
+          if (this.#serviceCallEncoding === "cbuf") {
+            // cbuf services separate the request and response schema types with a semi-colon
+            const parts = service.type.split(";");
+            if (parts.length !== 2) {
+              throw new Error(
+                `Invalid cbuf service type "${service.type}", expected single semi-colon delimiter`,
+              );
+            }
+            requestType = parts[0]!;
+            responseType = parts[1]!;
+          } else {
+            // Assume ROS-style service definition, where the request and response types are
+            // suffixed with "_Request" and "_Response"
+            requestType = `${service.type}_Request`;
+            responseType = `${service.type}_Response`;
+          }
+
           const parsedRequest = parseChannel({
-            messageEncoding: this.#serviceCallEncoding,
+            messageEncoding: requestMsgEncoding,
             schema: {
               name: requestType,
-              encoding: schemaEncoding,
-              data: textEncoder.encode(service.requestSchema),
+              encoding: service.request?.schemaEncoding ?? defaultSchemaEncoding,
+              data: textEncoder.encode(requestSchema),
             },
           });
           const parsedResponse = parseChannel({
-            messageEncoding: this.#serviceCallEncoding,
+            messageEncoding: responseMsgEncoding,
             schema: {
               name: responseType,
-              encoding: schemaEncoding,
-              data: textEncoder.encode(service.responseSchema),
+              encoding: service.response?.schemaEncoding ?? defaultSchemaEncoding,
+              data: textEncoder.encode(responseSchema),
             },
           });
           const requestMsgDef = rosDatatypesToMessageDefinition(
             parsedRequest.datatypes,
             requestType,
           );
-          const requestMessageWriter = ROS_ENCODINGS.includes(this.#serviceCallEncoding)
-            ? this.#serviceCallEncoding === "ros1"
-              ? new Ros1MessageWriter(requestMsgDef)
-              : new Ros2MessageWriter(requestMsgDef)
-            : new JsonMessageWriter();
+
+          let requestMessageWriter: MessageWriter | undefined;
+          if (requestMsgEncoding === "ros1") {
+            requestMessageWriter = new Ros1MessageWriter(requestMsgDef);
+          } else if (requestMsgEncoding === "cdr") {
+            requestMessageWriter = new Ros2MessageWriter(requestMsgDef);
+          } else if (requestMsgEncoding === "json") {
+            requestMessageWriter = new JsonMessageWriter();
+          } else if (requestMsgEncoding === "cbuf") {
+            requestMessageWriter = new CbufMessageWriter(requestSchema, requestType);
+          }
+          if (!requestMessageWriter) {
+            // Should never go here as we sanity-checked the encoding already above
+            throw new Error(`Unsupported service request message encoding ${requestMsgEncoding}`);
+          }
 
           // Add type definitions for service response and request
           this.#updateDataTypes(parsedRequest.datatypes);
@@ -1059,10 +1113,11 @@ export default class FoxgloveWebSocketPlayer implements Player {
 
     const { service, parsedResponse, requestMessageWriter } = resolvedService;
 
+    const requestMsgEncoding = service.request?.encoding ?? this.#serviceCallEncoding!;
     const serviceCallRequest: ServiceCallPayload = {
       serviceId: service.id,
       callId: ++this.#nextServiceCallId,
-      encoding: this.#serviceCallEncoding!,
+      encoding: requestMsgEncoding,
       data: new DataView(new Uint8Array().buffer),
     };
 

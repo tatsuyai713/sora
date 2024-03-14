@@ -4,9 +4,11 @@
 
 export const appSettings = {
   about: "About",
+  advanced: "Advanced",
   askEachTime: "Ask each time",
   colorScheme: "Color scheme",
   dark: "Dark",
+  debugModeDescription: "Enable panels and features for debugging Foxglove",
   desktopApp: "Desktop app",
   displayTimestampsIn: "Display timestamps in",
   experimentalFeatures: "Experimental features",
@@ -24,8 +26,6 @@ export const appSettings = {
   noExperimentalFeatures: "Currently there are no experimental features.",
   ros: "ROS",
   settings: "Settings",
-  studioDebugPanels: "Debug mode",
-  studioDebugPanelsDescription: "Enable panels and features for debugging Foxglove Studio.",
   timestampFormat: "Timestamp format",
   webApp: "Web app",
 };

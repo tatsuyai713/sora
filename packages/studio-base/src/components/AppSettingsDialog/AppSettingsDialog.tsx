@@ -248,6 +248,22 @@ export function AppSettingsDialog(
               <LanguageSettings />
               {supportsAppUpdates && <AutoUpdate />}
               {isDesktopApp() && <RosPackagePath />}
+              <Stack>
+                <FormLabel>{t("advanced")}:</FormLabel>
+                <FormControlLabel
+                  className={classes.formControlLabel}
+                  control={
+                    <Checkbox
+                      className={classes.checkbox}
+                      checked={debugModeEnabled}
+                      onChange={(_, checked) => {
+                        void setDebugModeEnabled(checked);
+                      }}
+                    />
+                  }
+                  label={t("debugModeDescription")}
+                />
+              </Stack>
             </Stack>
           </section>
 

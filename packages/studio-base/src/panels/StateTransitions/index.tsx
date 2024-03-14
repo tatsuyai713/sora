@@ -62,6 +62,7 @@ const useStyles = makeStyles()((theme) => ({
   chartWrapper: {
     position: "relative",
     marginTop: theme.spacing(0.5),
+    height: "100%",
   },
   chartOverlay: {
     top: 0,
@@ -309,11 +310,21 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
     };
   }, []);
 
-  const databounds: undefined | Bounds = useMemo(() => {
-    if (
-      (config.xAxisMinValue != undefined || config.xAxisMaxValue != undefined) &&
-      endTimeSinceStart != undefined
-    ) {
+  // Compute the fixed bounds (either via min/max x-axis config or end time since start).
+  //
+  // For recordings, the bounds are actually fixed but for live connections the "endTimeSinceStart"
+  // will increase and these bounds are not technically fixed. But in those instances there is also
+  // new data coming in when the bounds are changing.
+  //
+  // We need to keep the fixedBounds reference stable (if it can be stable) for the databounds memo
+  // below, otherwise playing through a recording will update the currentTimeSince start and return
+  // a new fixedBounds reference which causes expensive downstream rendering.
+  const fixedBounds = useMemo(() => {
+    if (endTimeSinceStart == undefined) {
+      return undefined;
+    }
+
+    if (config.xAxisMinValue != undefined || config.xAxisMaxValue != undefined) {
       return {
         x: {
           min: config.xAxisMinValue ?? 0,
@@ -321,30 +332,30 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
         },
         y: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
       };
-    } else if (config.xAxisRange != undefined && currentTimeSinceStart != undefined) {
+    }
+
+    // If we have no configured xAxis min/max or range, then we set the x axis max to end time
+    // This will mirror the plot behavior of showing the full x-axis for data time range rather
+    // than constantly adjusting the end time to the latest loaded state transition while data
+    // is loading.
+    return {
+      x: { min: 0, max: endTimeSinceStart },
+      y: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
+    };
+  }, [config.xAxisMaxValue, config.xAxisMinValue, endTimeSinceStart]);
+
+  // Compute the data bounds. The bounds are either a fixed amount of lookback from the current time
+  // or they are fixed bounds with a specific range.
+  const databounds: undefined | Bounds = useMemo(() => {
+    if (config.xAxisRange != undefined && currentTimeSinceStart != undefined) {
       return {
         x: { min: currentTimeSinceStart - config.xAxisRange, max: currentTimeSinceStart },
         y: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
       };
-    } else if (endTimeSinceStart != undefined) {
-      // If we have no configured xAxis min/max or range, then we set the x axis max to end time
-      // This will mirror the plot behavior of showing the full x-axis for data time range rather
-      // than constantly adjusting the end time to the latest loaded state transition while data
-      // is loading.
-      return {
-        x: { min: 0, max: endTimeSinceStart },
-        y: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
-      };
     }
 
-    return undefined;
-  }, [
-    config.xAxisMaxValue,
-    config.xAxisMinValue,
-    config.xAxisRange,
-    currentTimeSinceStart,
-    endTimeSinceStart,
-  ]);
+    return fixedBounds;
+  }, [config.xAxisRange, currentTimeSinceStart, fixedBounds]);
 
   // Use a debounce and 0 refresh rate to avoid triggering a resize observation while handling
   // an existing resize observation.
@@ -399,8 +410,8 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
   return (
     <Stack flexGrow={1} overflow="hidden" style={{ zIndex: 0 }}>
       <PanelToolbar />
-      <Stack fullWidth flex="auto" overflowX="hidden" overflowY="auto">
-        <div className={classes.chartWrapper} style={{ height }} ref={sizeRef}>
+      <Stack fullWidth fullHeight flex="auto" overflowX="hidden" overflowY="auto">
+        <div className={classes.chartWrapper} ref={sizeRef}>
           <TimeBasedChart
             zoom
             isSynced={config.isSynced}
@@ -409,6 +420,7 @@ const StateTransitions = React.memo(function StateTransitions(props: Props) {
             height={height}
             data={data}
             dataBounds={databounds}
+            resetButtonPaddingBottom={2}
             type="scatter"
             xAxes={xScale}
             xAxisIsPlaybackTime

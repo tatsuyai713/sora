@@ -27,6 +27,8 @@ export type ParsedChannel = {
   datatypes: MessageDefinitionMap;
 };
 
+const KNOWN_EMPTY_SCHEMA_NAMES = ["std_msgs/Empty", "std_msgs/msg/Empty"];
+
 function parseIDLDefinitionsToDatatypes(
   parsedDefinitions: IDLMessageDefinition[],
   rootName?: string,
@@ -74,11 +76,28 @@ function parsedDefinitionsToDatatypes(
  * Process a channel/schema and extract information that can be used to deserialize messages on the
  * channel, and schemas in the format expected by Studio's RosDatatypes.
  *
+ * Empty ROS schemas (except std_msgs/[msg/]Empty) are treated as errors. If you want to allow empty
+ * schemas then use the `allowEmptySchema` option.
+ *
  * See:
  * - https://github.com/foxglove/mcap/blob/main/docs/specification/well-known-message-encodings.md
  * - https://github.com/foxglove/mcap/blob/main/docs/specification/well-known-schema-encodings.md
  */
-export function parseChannel(channel: Channel): ParsedChannel {
+export function parseChannel(
+  channel: Channel,
+  options?: { allowEmptySchema: boolean },
+): ParsedChannel {
+  // For ROS schemas, we expect the schema to be non-empty unless the
+  // schema name is one of the well-known empty schema names.
+  if (
+    options?.allowEmptySchema !== true &&
+    ["ros1msg", "ros2msg", "ros2idl"].includes(channel.schema?.encoding ?? "") &&
+    channel.schema?.data.length === 0 &&
+    !KNOWN_EMPTY_SCHEMA_NAMES.includes(channel.schema.name)
+  ) {
+    throw new Error(`Schema for ${channel.schema.name} is empty`);
+  }
+
   if (channel.messageEncoding === "json") {
     if (channel.schema != undefined && channel.schema.encoding !== "jsonschema") {
       throw new Error(
@@ -210,6 +229,16 @@ export function parseChannel(channel: Channel): ParsedChannel {
     }
     const schemaMap = res.schema;
     const hashMap = Cbuf.schemaMapToHashMap(schemaMap);
+
+    // For each schemaMap key that contains a `::` separator, add new entries to
+    // `schemaMap` with the same value as the original key, but with the `::`
+    // replaced by `.` and `/`
+    for (const [key, value] of Array.from(schemaMap.entries())) {
+      if (key.includes("::")) {
+        schemaMap.set(key.replace(/::/g, "."), value);
+        schemaMap.set(key.replace(/::/g, "/"), value);
+      }
+    }
 
     return {
       datatypes: res.schema,

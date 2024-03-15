@@ -5,8 +5,8 @@
 import { ChartDataset } from "chart.js";
 
 import { filterMap } from "@foxglove/den/collection";
+import { MessagePath } from "@foxglove/message-path";
 import { Immutable, Time, MessageEvent } from "@foxglove/studio";
-import { RosPath } from "@foxglove/studio-base/components/MessagePathSyntax/constants";
 import { simpleGetMessagePathDataItems } from "@foxglove/studio-base/components/MessagePathSyntax/simpleGetMessagePathDataItems";
 import { Bounds1D } from "@foxglove/studio-base/components/TimeBasedChart/types";
 import { PlayerState } from "@foxglove/studio-base/players/types";
@@ -27,9 +27,10 @@ type DatumWithReceiveTime = Datum & {
 };
 
 type IndexDatasetsSeries = {
+  configIndex: number;
   enabled: boolean;
   messagePath: string;
-  parsed: Immutable<RosPath>;
+  parsed: Immutable<MessagePath>;
   dataset: ChartDataset<"scatter", DatumWithReceiveTime[]>;
 };
 
@@ -37,6 +38,8 @@ const emptyPaths = new Set<string>();
 
 export class IndexDatasetsBuilder implements IDatasetsBuilder {
   #seriesByKey = new Map<SeriesConfigKey, IndexDatasetsSeries>();
+
+  #range?: Bounds1D;
 
   public handlePlayerState(state: Immutable<PlayerState>): Bounds1D | undefined {
     const activeData = state.activeData;
@@ -46,7 +49,9 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
 
     const msgEvents = activeData.messages;
     if (msgEvents.length === 0) {
-      return;
+      // When there are no new messages we keep returning the same bounds as before since our
+      // datasets have not changed.
+      return this.#range;
     }
 
     const range: Bounds1D = { min: 0, max: 0 };
@@ -79,7 +84,7 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
       range.max = Math.max(range.max, series.dataset.data.length - 1);
     }
 
-    return range;
+    return (this.#range = range);
   }
 
   public setSeries(series: Immutable<SeriesItem[]>): void {
@@ -90,6 +95,7 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
       let existingSeries = this.#seriesByKey.get(item.key);
       if (!existingSeries) {
         existingSeries = {
+          configIndex: item.configIndex,
           enabled: item.enabled,
           messagePath: item.messagePath,
           parsed: item.parsed,
@@ -99,6 +105,8 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
         };
       }
 
+      existingSeries.configIndex = item.configIndex;
+      existingSeries.enabled = item.enabled;
       existingSeries.dataset = {
         ...existingSeries.dataset,
         borderColor: item.color,
@@ -123,14 +131,12 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
   public async getViewportDatasets(): Promise<GetViewportDatasetsResult> {
     const datasets: Dataset[] = [];
     for (const series of this.#seriesByKey.values()) {
-      if (!series.enabled) {
-        continue;
+      if (series.enabled) {
+        datasets[series.configIndex] = series.dataset;
       }
-
-      datasets.push(series.dataset);
     }
 
-    return { datasets, pathsWithMismatchedDataLengths: emptyPaths };
+    return { datasetsByConfigIndex: datasets, pathsWithMismatchedDataLengths: emptyPaths };
   }
 
   public async getCsvData(): Promise<CsvDataset[]> {
@@ -147,10 +153,6 @@ export class IndexDatasetsBuilder implements IDatasetsBuilder {
     }
 
     return datasets;
-  }
-
-  public destroy(): void {
-    // no-op this builder does not use a worker
   }
 }
 

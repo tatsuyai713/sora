@@ -25,6 +25,7 @@ import NoopMetricsCollector from "@foxglove/studio-base/players/NoopMetricsColle
 import PlayerProblemManager from "@foxglove/studio-base/players/PlayerProblemManager";
 import {
   AdvertiseOptions,
+  PlaybackSpeed,
   Player,
   PlayerCapabilities,
   PlayerMetricsCollectorInterface,
@@ -96,6 +97,9 @@ type IterablePlayerOptions = {
 
   // Set to _false_ to disable preloading. (default: true)
   enablePreload?: boolean;
+
+  // Max. time that messages will be buffered ahead for smoother playback. (default: 10sec)
+  readAheadDuration?: Time;
 };
 
 type IterablePlayerState =
@@ -122,9 +126,10 @@ export class IterablePlayer implements Player {
   #state: IterablePlayerState = "preinit";
   #runningState: boolean = false;
 
+  #repeatEnabled: boolean = false;
   #isPlaying: boolean = false;
   #listener?: (playerState: PlayerState) => Promise<void>;
-  #speed: number = 1.0;
+  #speed: PlaybackSpeed = 1.0;
   #start?: Time;
   #end?: Time;
   #enablePreload = true;
@@ -193,7 +198,15 @@ export class IterablePlayer implements Player {
   #resolveIsClosed: () => void = () => {};
 
   public constructor(options: IterablePlayerOptions) {
-    const { metricsCollector, urlParams, source, name, enablePreload, sourceId } = options;
+    const {
+      metricsCollector,
+      urlParams,
+      source,
+      name,
+      enablePreload,
+      sourceId,
+      readAheadDuration = { sec: 10, nsec: 0 },
+    } = options;
 
     this.#iterableSource = source;
     if (source.sourceType === "deserialized") {
@@ -202,7 +215,7 @@ export class IterablePlayer implements Player {
     } else {
       const MEGABYTE_IN_BYTES = 1024 * 1024;
       const bufferInterface = new BufferedIterableSource(source, {
-        readAheadDuration: { sec: 120, nsec: 0 },
+        readAheadDuration,
         maxCacheSizeBytes: 600 * MEGABYTE_IN_BYTES,
       });
       this.#bufferImpl = bufferInterface;
@@ -279,11 +292,18 @@ export class IterablePlayer implements Player {
     }
   }
 
-  public setPlaybackSpeed(speed: number): void {
+  public setPlaybackSpeed(speed: PlaybackSpeed): void {
     this.#lastRangeMillis = undefined;
     this.#speed = speed;
 
     // Queue event state update to update speed in player state to UI
+    this.#queueEmitState();
+  }
+
+  // eslint-disable-next-line @foxglove/no-boolean-parameters
+  public enableRepeatPlayback(enable: boolean): void {
+    this.#repeatEnabled = enable;
+
     this.#queueEmitState();
   }
 
@@ -598,7 +618,16 @@ export class IterablePlayer implements Player {
       throw new Error("Invariant: Tried to reset playback iterator with no current time.");
     }
 
-    const next = add(this.#currentTime, { sec: 0, nsec: 1 });
+    if (!this.#start) {
+      throw new Error("Invariant: Tried to reset playback iterator with no start time.");
+    }
+
+    // When resetting the iterator to the start of the source, we must not add 1 ns otherwise we
+    // might skip messages whose timestamp is equal to the source start time.
+    const next =
+      compare(this.#currentTime, this.#start) === 0
+        ? this.#start
+        : add(this.#currentTime, { sec: 0, nsec: 1 });
 
     log.debug("Ending previous iterator");
     await this.#playbackIterator?.return?.();
@@ -817,6 +846,7 @@ export class IterablePlayer implements Player {
         startTime: this.#start,
         endTime: this.#end,
         isPlaying: this.#isPlaying,
+        repeatEnabled: this.#repeatEnabled,
         speed: this.#speed,
         lastSeekTime: this.#lastSeekEmitTime,
         topics: this.#providerTopics,
@@ -1037,6 +1067,16 @@ export class IterablePlayer implements Player {
     this.#bufferImpl.off("loadedRangesChange", rangeChangeHandler);
   }
 
+  // Repeating is a continuation of the playing state/we should already be playing
+  #repeatPlayback(): void {
+    if (!this.#isPlaying) {
+      return;
+    }
+    if (this.#start) {
+      this.seekPlayback(this.#start);
+    }
+  }
+
   async #statePlay() {
     this.#presence = PlayerPresence.PRESENT;
 
@@ -1053,7 +1093,12 @@ export class IterablePlayer implements Player {
 
     try {
       while (this.#isPlaying && !this.#hasError && !this.#nextState) {
-        if (compare(this.#currentTime, this.#end) >= 0) {
+        const timeToEnd = compare(this.#currentTime, this.#end);
+        if (this.#repeatEnabled && timeToEnd === 0) {
+          // Playback has ended and we should repeat
+          this.#repeatPlayback();
+          return;
+        } else if (timeToEnd >= 0) {
           // Playback has ended. Reset internal trackers for maintaining the playback speed.
           this.#lastTickMillis = undefined;
           this.#lastRangeMillis = undefined;

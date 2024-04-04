@@ -77,7 +77,7 @@ function parseCBufSchema(schema: string): ReturnType<typeof Cbuf.parseCBufSchema
     return Cbuf.parseCBufSchema(schema);
   } catch (unk) {
     const e = unk as Error;
-    return { error: e.stack ?? e.message, schema: new Map() };
+    return { error: e.message, schema: new Map() };
   }
 }
 

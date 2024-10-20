@@ -9,6 +9,29 @@
 export default async function showOpenFilePicker(
   options?: OpenFilePickerOptions,
 ): Promise<FileSystemFileHandle[] /* foxglove-depcheck-used: @types/wicg-file-system-access */> {
+
+  if (typeof window.showOpenFilePicker !== 'function') {
+    return new Promise<FileSystemFileHandle[]>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = options?.multiple || false;
+      input.accept = options?.types?.map((type) => Object.keys(type.accept).join(", ")).join(", ") || "";
+
+      input.onchange = () => {
+        const files = Array.from(input.files || []);
+
+        if (files.length === 0) {
+          resolve([]);
+          return;
+        }
+
+        resolve(files.map(file => ({ name: file.name } as FileSystemFileHandle)));
+      };
+
+      input.click();
+    });
+  }
+
   try {
     return await window.showOpenFilePicker(options);
   } catch (err) {

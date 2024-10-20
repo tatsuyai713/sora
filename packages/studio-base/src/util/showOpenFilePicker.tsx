@@ -8,16 +8,18 @@
  */
 export default async function showOpenFilePicker(
   options?: OpenFilePickerOptions,
-): Promise<FileSystemFileHandle[] /* foxglove-depcheck-used: @types/wicg-file-system-access */> {
-
+): Promise<FileSystemFileHandle[]> {
   if (typeof window.showOpenFilePicker !== 'function') {
     return new Promise<FileSystemFileHandle[]>((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = options?.multiple || false;
-      input.accept = options?.types?.map((type) => Object.keys(type.accept).join(", ")).join(", ") || "";
+      input.accept = options?.types?.map((type) => {
+        const acceptList = Object.keys(type.accept).flatMap((mimeType) => type.accept[mimeType]);
+        return acceptList.join(", ");
+      }).join(", ") || "";
 
-      input.onchange = () => {
+      input.onchange = async () => {
         const files = Array.from(input.files || []);
 
         if (files.length === 0) {
@@ -25,7 +27,25 @@ export default async function showOpenFilePicker(
           return;
         }
 
-        resolve(files.map(file => ({ name: file.name } as FileSystemFileHandle)));
+        const fileHandles = files.map((file) => {
+          const handle: FileSystemFileHandle = {
+            getFile: async () => file,
+            name: file.name,
+            kind: "file",
+            createWritable: async () => { throw new Error("Not supported"); },
+            createSyncAccessHandle: async () => { throw new Error("Not supported"); },
+            isFile: true,
+            isDirectory: false,
+            queryPermission: async () => "granted",
+            requestPermission: async () => "granted",
+            isSameEntry: async (otherHandle: FileSystemFileHandle) => {
+              return otherHandle.name === file.name;
+            },
+          };
+          return handle;
+        });
+
+        resolve(fileHandles);
       };
 
       input.click();

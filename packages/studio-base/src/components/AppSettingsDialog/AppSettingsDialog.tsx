@@ -3,16 +3,13 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import CloseIcon from "@mui/icons-material/Close";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {
   Alert,
   Button,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogProps,
-  FormControlLabel,
   IconButton,
   Link,
   Tab,
@@ -24,18 +21,15 @@ import { MouseEvent, SyntheticEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { makeStyles } from "tss-react/mui";
 
-import { AppSetting } from "@foxglove/studio-base/AppSetting";
 import OsContextSingleton from "@foxglove/studio-base/OsContextSingleton";
 import CopyButton from "@foxglove/studio-base/components/CopyButton";
 import { ExperimentalFeatureSettings } from "@foxglove/studio-base/components/ExperimentalFeatureSettings";
-import ExtensionsSettings from "@foxglove/studio-base/components/ExtensionsSettings";
 import FoxgloveLogoText from "@foxglove/studio-base/components/FoxgloveLogoText";
 import Stack from "@foxglove/studio-base/components/Stack";
 import {
   useWorkspaceStore,
   WorkspaceContextStore,
 } from "@foxglove/studio-base/context/Workspace/WorkspaceContext";
-import { useAppConfigurationValue } from "@foxglove/studio-base/hooks";
 import isDesktopApp from "@foxglove/studio-base/util/isDesktopApp";
 
 import {
@@ -176,8 +170,6 @@ const aboutItems = new Map<
 
 export type AppSettingsTab =
   | "general"
-  | "privacy"
-  | "extensions"
   | "experimental-features"
   | "about";
 
@@ -192,12 +184,6 @@ export function AppSettingsDialog(
   const initialActiveTab = useWorkspaceStore(selectWorkspaceInitialActiveTab);
   const [activeTab, setActiveTab] = useState<AppSettingsTab>(
     _activeTab ?? initialActiveTab ?? "general",
-  );
-  const [crashReportingEnabled, setCrashReportingEnabled] = useAppConfigurationValue<boolean>(
-    AppSetting.CRASH_REPORTING_ENABLED,
-  );
-  const [telemetryEnabled, setTelemetryEnabled] = useAppConfigurationValue<boolean>(
-    AppSetting.TELEMETRY_ENABLED,
   );
   const { classes, cx, theme } = useStyles();
   const smUp = useMediaQuery(theme.breakpoints.up("sm"));
@@ -243,8 +229,6 @@ export function AppSettingsDialog(
           onChange={handleTabChange}
         >
           <Tab className={classes.tab} label={t("general")} value="general" />
-          <Tab className={classes.tab} label={t("privacy")} value="privacy" />
-          <Tab className={classes.tab} label={t("extensions")} value="extensions" />
           <Tab
             className={classes.tab}
             label={t("experimentalFeatures")}
@@ -267,52 +251,6 @@ export function AppSettingsDialog(
               {supportsAppUpdates && <AutoUpdate />}
               {!isDesktopApp() && <LaunchDefault />}
               {isDesktopApp() && <RosPackagePath />}
-            </Stack>
-          </section>
-
-          <section
-            className={cx(classes.tabPanel, {
-              [classes.tabPanelActive]: activeTab === "privacy",
-            })}
-          >
-            <Stack gap={2}>
-              <Alert color="info" icon={<InfoOutlinedIcon />}>
-                {t("privacyDescription")}
-              </Alert>
-              <Stack gap={0.5} paddingLeft={2}>
-                <FormControlLabel
-                  className={classes.formControlLabel}
-                  control={
-                    <Checkbox
-                      className={classes.checkbox}
-                      checked={telemetryEnabled ?? true}
-                      onChange={(_event, checked) => void setTelemetryEnabled(checked)}
-                    />
-                  }
-                  label={t("sendAnonymizedUsageData")}
-                />
-                <FormControlLabel
-                  className={classes.formControlLabel}
-                  control={
-                    <Checkbox
-                      className={classes.checkbox}
-                      checked={crashReportingEnabled ?? true}
-                      onChange={(_event, checked) => void setCrashReportingEnabled(checked)}
-                    />
-                  }
-                  label={t("sendAnonymizedCrashReports")}
-                />
-              </Stack>
-            </Stack>
-          </section>
-
-          <section
-            className={cx(classes.tabPanel, {
-              [classes.tabPanelActive]: activeTab === "extensions",
-            })}
-          >
-            <Stack gap={2}>
-              <ExtensionsSettings />
             </Stack>
           </section>
 

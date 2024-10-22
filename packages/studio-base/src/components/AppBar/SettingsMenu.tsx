@@ -85,13 +85,6 @@ export function SettingsMenu({
         >
           {t("settings")}
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            onSettingsClick("extensions");
-          }}
-        >
-          {t("extensions")}
-        </MenuItem>
         <Divider variant="middle" />
         <MenuItem onClick={onDocsClick}>{t("documentation")}</MenuItem>
         <MenuItem onClick={onSlackClick}>{t("joinSlackCommunity")}</MenuItem>

@@ -21,8 +21,8 @@ export const openDialog = {
   openDataSource: "Open data source",
   openLocalFile: "Open local file",
   openLocalFileDescription: "Visualize data directly from your local filesystem.",
-  openUrl: "Upload and share data",
-  openUrlDescription: "Use Foxglove Data Platform to share data with your team.",
+  // openUrl: "Upload and share data",
+  // openUrlDescription: "Use Foxglove Data Platform to share data with your team.",
   recentDataSources: "Recent data sources",
   secureStorageOfData: "Securely store petabytes of ROS or custom data",
   seeTutorials: "See tutorials",
@@ -31,6 +31,6 @@ export const openDialog = {
   startCollaborating: "Start collaborating with your Foxglove organization",
   startCollaboratingDescription:
     "Make the most of your Foxglove account – whether you want to dive deep on your data or share tools with your teammates.",
-  uploadToDataPlatform: "Upload to Data Platform",
+  // uploadToDataPlatform: "Upload to Data Platform",
   viewOurDocs: "View our docs",
 };

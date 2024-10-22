@@ -36,7 +36,6 @@ import {
   AutoUpdate,
   ColorSchemeSettings,
   LanguageSettings,
-  LaunchDefault,
   MessageFramerate,
   RosPackagePath,
   TimeFormat,
@@ -249,7 +248,6 @@ export function AppSettingsDialog(
               <MessageFramerate />
               <LanguageSettings />
               {supportsAppUpdates && <AutoUpdate />}
-              {!isDesktopApp() && <LaunchDefault />}
               {isDesktopApp() && <RosPackagePath />}
             </Stack>
           </section>

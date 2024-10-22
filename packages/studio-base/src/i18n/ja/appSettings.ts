@@ -23,7 +23,6 @@ export const appSettings: Partial<TypeOptions["resources"]["appSettings"]> = {
   light: "ライト",
   messageRate: "メッセージレート",
   noExperimentalFeatures: "現在、実験的機能はありません。",
-  openLinksIn: "リンクを開く",
   ros: "ROS",
   settings: "設定",
   studioDebugPanels: undefined,

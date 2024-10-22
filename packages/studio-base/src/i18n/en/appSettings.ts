@@ -22,7 +22,6 @@ export const appSettings = {
   newAppMenu: "Enable unified navigation",
   newAppMenuDescription: "Show the new menu and navigation.",
   noExperimentalFeatures: "Currently there are no experimental features.",
-  openLinksIn: "Open links in",
   ros: "ROS",
   settings: "Settings",
   studioDebugPanels: "Debug mode",

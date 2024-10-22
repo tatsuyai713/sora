@@ -47,11 +47,6 @@ export function LaunchPreferenceScreen(): ReactElement {
     await setGlobalPreference(rememberPreference ? LaunchPreferenceValue.WEB : undefined);
   }
 
-  async function launchInDesktop() {
-    setSessionPreference(LaunchPreferenceValue.DESKTOP); // always set session preference to allow overriding the URL param
-    await setGlobalPreference(rememberPreference ? LaunchPreferenceValue.DESKTOP : undefined);
-  }
-
   function toggleRememberPreference() {
     setRememberPreference(!rememberPreference);
   }
@@ -62,12 +57,6 @@ export function LaunchPreferenceScreen(): ReactElement {
       primary: "Web",
       secondary: "Requires Chrome v76+",
       onClick: () => void launchInWeb(),
-    },
-    {
-      key: LaunchPreferenceValue.DESKTOP,
-      primary: "Desktop App",
-      secondary: "For Linux, Windows, and macOS",
-      onClick: () => void launchInDesktop(),
     },
   ];
 

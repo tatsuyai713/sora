@@ -218,10 +218,6 @@ function WorkspaceContent(props: WorkspaceProps): JSX.Element {
     window.open("https://foxglove.dev/docs", "_blank");
   });
 
-  useNativeAppMenuEvent("open-help-slack", () => {
-    window.open("https://foxglove.dev/slack", "_blank");
-  });
-
   const { enqueueSnackbar } = useSnackbar();
 
   const installExtension = useExtensionCatalog((state) => state.installExtension);

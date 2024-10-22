@@ -22,7 +22,6 @@ export const appSettings: Partial<TypeOptions["resources"]["appSettings"]> = {
   light: "亮色",
   messageRate: "消息速率",
   noExperimentalFeatures: "目前没有实验性的功能。",
-  openLinksIn: "打开链接",
   ros: "ROS",
   settings: "设置",
   studioDebugPanels: undefined,

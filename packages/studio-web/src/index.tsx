@@ -7,9 +7,7 @@ import ReactDOM from "react-dom";
 
 import Logger from "@foxglove/log";
 import type { IDataSourceFactory } from "@foxglove/studio-base";
-import CssBaseline from "@foxglove/studio-base/components/CssBaseline";
 
-import { CompatibilityBanner } from "./CompatibilityBanner";
 import { canRenderApp } from "./canRenderApp";
 
 const log = Logger.getLogger(__filename);
@@ -41,25 +39,13 @@ export async function main(getParams: () => Promise<MainParams> = async () => ({
     throw new Error("missing #root element");
   }
 
-  const chromeMatch = navigator.userAgent.match(/Chrome\/(\d+)\./);
-  const chromeVersion = chromeMatch ? parseInt(chromeMatch[1] ?? "", 10) : 0;
-  const isChrome = chromeVersion !== 0;
-
   const canRender = canRenderApp();
-  const banner = (
-    <CompatibilityBanner
-      isChrome={isChrome}
-      currentVersion={chromeVersion}
-      isDismissable={canRender}
-    />
-  );
 
   if (!canRender) {
     // eslint-disable-next-line react/no-deprecated
     ReactDOM.render(
       <StrictMode>
         <LogAfterRender>
-          <CssBaseline>{banner}</CssBaseline>
         </LogAfterRender>
       </StrictMode>,
       rootEl,
@@ -89,7 +75,6 @@ export async function main(getParams: () => Promise<MainParams> = async () => ({
   ReactDOM.render(
     <StrictMode>
       <LogAfterRender>
-        {banner}
         {rootElement}
       </LogAfterRender>
     </StrictMode>,

@@ -25,7 +25,6 @@ import {
 } from "@foxglove/studio-base/context/CurrentLayoutContext";
 import {
   WorkspaceContextStore,
-  WorkspaceStoreSelectors,
   useWorkspaceStore,
 } from "@foxglove/studio-base/context/Workspace/WorkspaceContext";
 import { useWorkspaceActions } from "@foxglove/studio-base/context/Workspace/useWorkspaceActions";
@@ -179,8 +178,6 @@ export function AppBar(props: AppBarProps): JSX.Element {
   const leftSidebarOpen = useWorkspaceStore(selectLeftSidebarOpen);
   const rightSidebarOpen = useWorkspaceStore(selectRightSidebarOpen);
 
-  const kioskModeActive = useWorkspaceStore(WorkspaceStoreSelectors.selectKioskModeActive);
-
   const { sidebarActions } = useWorkspaceActions();
 
   const [appMenuEl, setAppMenuEl] = useState<undefined | HTMLElement>(undefined);
@@ -195,7 +192,7 @@ export function AppBar(props: AppBarProps): JSX.Element {
     <>
       <AppBarContainer onDoubleClick={onDoubleClick} leftInset={leftInset}>
         <div className={classes.toolbar}>
-          {!kioskModeActive && (
+          {(
             <div className={classes.start}>
               <div className={classes.startInner}>
                 <IconButton
@@ -249,7 +246,7 @@ export function AppBar(props: AppBarProps): JSX.Element {
             <DataSource />
           </div>
 
-          {!kioskModeActive && (
+          {(
             <div className={classes.end}>
               <div className={classes.endInner}>
                 {appBarLayoutButton}

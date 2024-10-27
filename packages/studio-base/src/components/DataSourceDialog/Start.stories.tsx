@@ -108,7 +108,7 @@ function CurrentUserWrapper(props: {
   userType?: UserType | undefined;
 }): JSX.Element {
   const value: CurrentUser = {
-    currentUserType: props.userType ?? "unauthenticated",
+    currentUserType: props.userType ?? "authenticated-team",
     signIn: () => undefined,
     signOut: async () => undefined,
   };
@@ -174,31 +174,6 @@ export const UserPrivateChinese: StoryObj = {
 export const UserPrivateJapanese: StoryObj = {
   ...UserPrivate,
   name: "User not authenticated (private) Japanese",
-  parameters: { forceLanguage: "ja" },
-};
-
-export const UserAuthedFree: StoryObj = {
-  render: () => {
-    return (
-      <CurrentUserWrapper userType="authenticated-free">
-        <PlayerSelectionContext.Provider value={playerSelection}>
-          <DataSourceDialog backdropAnimation={false} />
-        </PlayerSelectionContext.Provider>
-      </CurrentUserWrapper>
-    );
-  },
-  name: "User Authenticated with Free Account",
-};
-
-export const UserAuthedFreeChinese: StoryObj = {
-  ...UserAuthedFree,
-  name: "User Authenticated with Free Account Chinese",
-  parameters: { forceLanguage: "zh" },
-};
-
-export const UserAuthedFreeJapanese: StoryObj = {
-  ...UserAuthedFree,
-  name: "User Authenticated with Free Account Japanese",
   parameters: { forceLanguage: "ja" },
 };
 

@@ -165,7 +165,7 @@ function SidebarItems(props: {
   const { classes } = useStyles();
   const { t } = useTranslation("openDialog");
 
-  const { freeUser, teamOrEnterpriseUser } = useMemo(() => {
+  const { teamOrEnterpriseUser } = useMemo(() => {
     const demoItem = {
       id: "new",
       title: t("newToFoxgloveStudio"),
@@ -203,7 +203,6 @@ function SidebarItems(props: {
       ),
     };
     return {
-      freeUser: [demoItem],
       teamOrEnterpriseUser: [
         demoItem,
         {
@@ -284,48 +283,12 @@ function SidebarItems(props: {
 
   const sidebarItems: SidebarItem[] = useMemo(() => {
     switch (currentUserType) {
-      case "unauthenticated":
-        return [...freeUser];
-      case "authenticated-free":
-        return [
-          {
-            id: "start-collaborating",
-            title: t("startCollaborating"),
-            text: t("startCollaboratingDescription"),
-            actions: (
-              <>
-                <Button
-                  href="https://console.foxglove.dev/recordings"
-                  target="_blank"
-                  variant="outlined"
-                  className={classes.button}
-                  onClick={() => {
-                    void analytics.logEvent(AppEvent.DIALOG_CLICK_CTA, {
-                      user: currentUserType,
-                      cta: "upload-to-dp",
-                    });
-                  }}
-                >
-                  {t("uploadToDataPlatform")}
-                </Button>
-                <Button
-                  href="https://docs.foxglove.dev/docs/visualization/layouts#team-layouts"
-                  target="_blank"
-                  className={classes.button}
-                >
-                  {t("shareLayouts")}
-                </Button>
-              </>
-            ),
-          },
-          ...freeUser,
-        ];
       case "authenticated-team":
         return teamOrEnterpriseUser;
       case "authenticated-enterprise":
         return teamOrEnterpriseUser;
     }
-  }, [analytics, classes.button, currentUserType, freeUser, t, teamOrEnterpriseUser]);
+  }, [analytics, classes.button, currentUserType, t, teamOrEnterpriseUser]);
 
   return (
     <>

@@ -9,7 +9,6 @@ import Logger from "@foxglove/log";
 import type { IDataSourceFactory } from "@foxglove/studio-base";
 import CssBaseline from "@foxglove/studio-base/components/CssBaseline";
 
-import { CompatibilityBanner } from "./CompatibilityBanner";
 import { canRenderApp } from "./canRenderApp";
 
 const log = Logger.getLogger(__filename);
@@ -41,25 +40,14 @@ export async function main(getParams: () => Promise<MainParams> = async () => ({
     throw new Error("missing #root element");
   }
 
-  const chromeMatch = navigator.userAgent.match(/Chrome\/(\d+)\./);
-  const chromeVersion = chromeMatch ? parseInt(chromeMatch[1] ?? "", 10) : 0;
-  const isChrome = chromeVersion !== 0;
-
   const canRender = canRenderApp();
-  const banner = (
-    <CompatibilityBanner
-      isChrome={isChrome}
-      currentVersion={chromeVersion}
-      isDismissable={canRender}
-    />
-  );
 
   if (!canRender) {
     // eslint-disable-next-line react/no-deprecated
     ReactDOM.render(
       <StrictMode>
         <LogAfterRender>
-          <CssBaseline>{banner}</CssBaseline>
+          <CssBaseline></CssBaseline>
         </LogAfterRender>
       </StrictMode>,
       rootEl,
@@ -67,7 +55,7 @@ export async function main(getParams: () => Promise<MainParams> = async () => ({
     return;
   }
 
-  // Use an async import to delay loading the majority of studio-base code until the CompatibilityBanner
+  // Use an async import to delay loading the majority of studio-base code
   // can be displayed.
   const { installDevtoolsFormatters, overwriteFetch, waitForFonts, initI18n, StudioApp } =
     await import("@foxglove/studio-base");
@@ -89,7 +77,6 @@ export async function main(getParams: () => Promise<MainParams> = async () => ({
   ReactDOM.render(
     <StrictMode>
       <LogAfterRender>
-        {banner}
         {rootElement}
       </LogAfterRender>
     </StrictMode>,

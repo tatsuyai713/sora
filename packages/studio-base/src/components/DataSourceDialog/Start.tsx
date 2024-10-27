@@ -207,42 +207,6 @@ function SidebarItems(props: {
       teamOrEnterpriseUser: [
         demoItem,
         {
-          id: "join-community",
-          title: t("joinOurCommunity"),
-          text: t("joinOurCommunityDescription"),
-          actions: (
-            <>
-              <Button
-                href="https://foxglove.dev/slack"
-                target="_blank"
-                className={classes.button}
-                variant="outlined"
-                onClick={() => {
-                  void analytics.logEvent(AppEvent.DIALOG_CLICK_CTA, {
-                    user: currentUserType,
-                    cta: "join-slack",
-                  });
-                }}
-              >
-                {t("joinOurSlack")}
-              </Button>
-              <Button
-                href="https://github.com/foxglove/studio/issues/new/choose"
-                target="_blank"
-                className={classes.button}
-                onClick={() => {
-                  void analytics.logEvent(AppEvent.DIALOG_CLICK_CTA, {
-                    user: currentUserType,
-                    cta: "go-to-github",
-                  });
-                }}
-              >
-                {t("openAGitHubIssue")}
-              </Button>
-            </>
-          ),
-        },
-        {
           id: "need-help",
           title: t("needHelp"),
           text: t("needHelpDescription"),
@@ -284,42 +248,6 @@ function SidebarItems(props: {
 
   const sidebarItems: SidebarItem[] = useMemo(() => {
     switch (currentUserType) {
-      case "unauthenticated":
-        return [...freeUser];
-      case "authenticated-free":
-        return [
-          {
-            id: "start-collaborating",
-            title: t("startCollaborating"),
-            text: t("startCollaboratingDescription"),
-            actions: (
-              <>
-                <Button
-                  href="https://console.foxglove.dev/recordings"
-                  target="_blank"
-                  variant="outlined"
-                  className={classes.button}
-                  onClick={() => {
-                    void analytics.logEvent(AppEvent.DIALOG_CLICK_CTA, {
-                      user: currentUserType,
-                      cta: "upload-to-dp",
-                    });
-                  }}
-                >
-                  {t("uploadToDataPlatform")}
-                </Button>
-                <Button
-                  href="https://docs.foxglove.dev/docs/visualization/layouts#team-layouts"
-                  target="_blank"
-                  className={classes.button}
-                >
-                  {t("shareLayouts")}
-                </Button>
-              </>
-            ),
-          },
-          ...freeUser,
-        ];
       case "authenticated-team":
         return teamOrEnterpriseUser;
       case "authenticated-enterprise":
@@ -406,7 +334,6 @@ export default function Start(): JSX.Element {
                 secondaryText={item.secondaryText}
                 icon={item.icon}
                 onClick={item.onClick}
-                href={undefined}
                 target="_blank"
               />
             ))}

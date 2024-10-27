@@ -5,8 +5,6 @@
 import Brightness5Icon from "@mui/icons-material/Brightness5";
 import ComputerIcon from "@mui/icons-material/Computer";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
-import QuestionAnswerOutlinedIcon from "@mui/icons-material/QuestionAnswerOutlined";
-import WebIcon from "@mui/icons-material/Web";
 import {
   Autocomplete,
   Checkbox,
@@ -35,7 +33,6 @@ import { useAppTimeFormat } from "@foxglove/studio-base/hooks";
 import { useAppConfigurationValue } from "@foxglove/studio-base/hooks/useAppConfigurationValue";
 import { Language } from "@foxglove/studio-base/i18n";
 import { reportError } from "@foxglove/studio-base/reportError";
-import { LaunchPreferenceValue } from "@foxglove/studio-base/types/LaunchPreferenceValue";
 import { TimeDisplayMethod } from "@foxglove/studio-base/types/panels";
 import { formatTime } from "@foxglove/studio-base/util/formatTime";
 import { formatTimeRaw } from "@foxglove/studio-base/util/time";
@@ -230,48 +227,6 @@ export function TimeFormat({
         </ToggleButton>
         <ToggleButton value="TOD" data-testid="timeformat-local">
           {formatTime(exampleTime, timezone)}
-        </ToggleButton>
-      </ToggleButtonGroup>
-    </Stack>
-  );
-}
-
-export function LaunchDefault(): React.ReactElement {
-  const { classes } = useStyles();
-  const { t } = useTranslation("appSettings");
-  const [preference, setPreference] = useAppConfigurationValue<string | undefined>(
-    AppSetting.LAUNCH_PREFERENCE,
-  );
-  let sanitizedPreference: LaunchPreferenceValue;
-  switch (preference) {
-    case LaunchPreferenceValue.WEB:
-    case LaunchPreferenceValue.DESKTOP:
-    case LaunchPreferenceValue.ASK:
-      sanitizedPreference = preference;
-      break;
-    default:
-      sanitizedPreference = LaunchPreferenceValue.WEB;
-  }
-
-  return (
-    <Stack>
-      <FormLabel>{t("openLinksIn")}:</FormLabel>
-      <ToggleButtonGroup
-        color="primary"
-        size="small"
-        fullWidth
-        exclusive
-        value={sanitizedPreference}
-        onChange={(_, value?: string) => value != undefined && void setPreference(value)}
-      >
-        <ToggleButton value={LaunchPreferenceValue.WEB} className={classes.toggleButton}>
-          <WebIcon /> {t("webApp")}
-        </ToggleButton>
-        <ToggleButton value={LaunchPreferenceValue.DESKTOP} className={classes.toggleButton}>
-          <ComputerIcon /> {t("desktopApp")}
-        </ToggleButton>
-        <ToggleButton value={LaunchPreferenceValue.ASK} className={classes.toggleButton}>
-          <QuestionAnswerOutlinedIcon /> {t("askEachTime")}
         </ToggleButton>
       </ToggleButtonGroup>
     </Stack>

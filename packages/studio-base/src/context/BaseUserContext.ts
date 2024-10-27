@@ -5,8 +5,6 @@
 import { createContext, useContext } from "react";
 
 export type UserType =
-  | "unauthenticated"
-  | "authenticated-free"
   | "authenticated-team"
   | "authenticated-enterprise";
 
@@ -17,7 +15,7 @@ export interface CurrentUser {
 }
 
 const BaseUserContext = createContext<CurrentUser>({
-  currentUserType: "unauthenticated",
+  currentUserType: "authenticated-team",
 });
 BaseUserContext.displayName = "BaseUserContext";
 

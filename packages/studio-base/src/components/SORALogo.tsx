@@ -9,7 +9,7 @@ export function SORALogo(props: SvgIconProps): JSX.Element {
     <SvgIcon viewBox="-20 -20 100 100" {...props}>
       <title>SORA</title>
       <g fill="#FFFFFF">
-        <path d="M10,90 L40,10 ...Z" /> <!-- S -->
+        <path d="M10,80 C10,50 50,50 50,20 C50,-10 10,-10 10,20 L10,50 C10,80 50,80 50,110 C50,140 10,140 10,110 Z" />
       </g>
     </SvgIcon>
   );

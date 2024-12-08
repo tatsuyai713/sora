@@ -9,10 +9,10 @@ export default function SORALogoText(props: SvgIconProps): JSX.Element {
     <SvgIcon viewBox="0 0 400 68.5" {...props}>
       <title>SORA</title>
       <g fill="#4D4D4D">
-        <path d="M10,90 L40,10 ...Z" /> <!-- S -->
-        <path d="M60,90 L90,10 ...Z" /> <!-- O -->
-        <path d="M110,90 L140,10 ...Z" /> <!-- R -->
-        <path d="M160,90 L190,10 ...Z" /> <!-- A -->
+        <path d="M10,80 C10,50 50,50 50,20 C50,-10 10,-10 10,20 L10,50 C10,80 50,80 50,110 C50,140 10,140 10,110 Z" />
+        <path d="M100,50 C100,20 130,20 130,50 C130,80 100,80 100,50 Z" />
+        <path d="M160,50 C160,20 190,20 190,50 C190,80 160,80 160,50 Z M190,80 L210,100 L180,100 Z" />
+        <path d="M240,110 L260,50 L280,110 Z M250,90 L270,90 Z" />
       </g>
     </SvgIcon>
   );

@@ -12,7 +12,7 @@ export const openDialog = {
   learnMore: "Learn more",
   needHelp: "Need help?",
   needHelpDescription: "View our documentation, or check out the tutorials on the Foxglove blog.",
-  newToFoxgloveStudio: "New to Foxglove Studio?",
+  newToFoxgloveStudio: "New to SORA?",
   newToFoxgloveStudioDescription:
     "Start by exploring a sample dataset or checking out our documentation.",
   openAGitHubIssue: "Open a GitHub issue",

@@ -25,7 +25,7 @@ import { makeStyles } from "tss-react/mui";
 import OsContextSingleton from "@foxglove/studio-base/OsContextSingleton";
 import CopyButton from "@foxglove/studio-base/components/CopyButton";
 import { ExperimentalFeatureSettings } from "@foxglove/studio-base/components/ExperimentalFeatureSettings";
-import FoxgloveLogoText from "@foxglove/studio-base/components/FoxgloveLogoText";
+import SORALogoText from "@foxglove/studio-base/components/SORALogoText";
 import Stack from "@foxglove/studio-base/components/Stack";
 import {
   useWorkspaceStore,
@@ -147,7 +147,7 @@ const aboutItems = new Map<
     {
       subheader: "Products",
       links: [
-        { title: "Foxglove Studio", url: "https://foxglove.dev/studio" },
+        { title: "SORA", url: "https://foxglove.dev/studio" },
         { title: "Foxglove Data Platform", url: "https://foxglove.dev/data-platform" },
       ],
     },
@@ -271,11 +271,11 @@ export function AppSettingsDialog(
           >
             <Stack gap={2} alignItems="flex-start">
               <header>
-                <FoxgloveLogoText color="primary" className={classes.logo} />
+                <SORALogoText color="primary" className={classes.logo} />
               </header>
               <Stack direction="row" alignItems="center" gap={1}>
                 <Typography variant="body2">
-                  Foxglove Studio version {FOXGLOVE_STUDIO_VERSION}
+                  SORA version {FOXGLOVE_STUDIO_VERSION}
                 </Typography>
                 <CopyButton
                   size="small"

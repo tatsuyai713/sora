@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import tc from "tinycolor2";
 import { makeStyles } from "tss-react/mui";
 
-import { FoxgloveLogo } from "@foxglove/studio-base/components/FoxgloveLogo";
+import { SORALogo } from "@foxglove/studio-base/components/SORALogo";
 import Stack from "@foxglove/studio-base/components/Stack";
 import { useAppContext } from "@foxglove/studio-base/context/AppContext";
 import {
@@ -208,7 +208,7 @@ export function AppBar(props: AppBarProps): JSX.Element {
                     setAppMenuEl(event.currentTarget);
                   }}
                 >
-                  <FoxgloveLogo fontSize="inherit" color="inherit" />
+                  <SORALogo fontSize="inherit" color="inherit" />
                   <ChevronDown12Regular
                     className={classes.dropDownIcon}
                     primaryFill={theme.palette.common.white}

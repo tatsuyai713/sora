@@ -1,6 +1,6 @@
-# Foxglove Studio Extension API
+# SORA Extension API
 
-This package contains type definitions for writing [Foxglove Studio](https://foxglove.dev/) extensions.
+This package contains type definitions for writing [SORA](https://foxglove.dev/) extensions.
 
 See https://foxglove.dev/docs/extensions/getting-started
 

@@ -18,6 +18,7 @@ import {
   SampleNuscenesDataSourceFactory,
   SharedRoot,
   IdbExtensionLoader,
+  EmbeddedExtensionLoader,
 } from "@foxglove/studio-base";
 
 import LocalStorageAppConfiguration from "./services/LocalStorageAppConfiguration";
@@ -40,6 +41,7 @@ export function WebRoot(props: {
     [],
   );
   const [extensionLoaders] = useState(() => [
+    new EmbeddedExtensionLoader(),
     new IdbExtensionLoader("org"),
     new IdbExtensionLoader("local"),
   ]);

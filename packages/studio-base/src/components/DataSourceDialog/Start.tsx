@@ -9,7 +9,7 @@ import tinycolor from "tinycolor2";
 import { makeStyles } from "tss-react/mui";
 
 import { DataSourceDialogItem } from "@foxglove/studio-base/components/DataSourceDialog/DataSourceDialog";
-import FoxgloveLogoText from "@foxglove/studio-base/components/FoxgloveLogoText";
+import SORALogoText from "@foxglove/studio-base/components/SORALogoText";
 import Stack from "@foxglove/studio-base/components/Stack";
 import TextMiddleTruncate from "@foxglove/studio-base/components/TextMiddleTruncate";
 import { useAnalytics } from "@foxglove/studio-base/context/AnalyticsContext";
@@ -335,7 +335,7 @@ export default function Start(): JSX.Element {
   return (
     <Stack className={classes.grid}>
       <header className={classes.header}>
-        <FoxgloveLogoText color="primary" className={classes.logo} />
+        <SORALogoText color="primary" className={classes.logo} />
       </header>
       <Stack className={classes.content}>
         <Stack gap={4}>

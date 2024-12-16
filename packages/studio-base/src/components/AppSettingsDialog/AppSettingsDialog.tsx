@@ -25,6 +25,7 @@ import { makeStyles } from "tss-react/mui";
 import OsContextSingleton from "@foxglove/studio-base/OsContextSingleton";
 import CopyButton from "@foxglove/studio-base/components/CopyButton";
 import { ExperimentalFeatureSettings } from "@foxglove/studio-base/components/ExperimentalFeatureSettings";
+import ExtensionsSettings from "@foxglove/studio-base/components/ExtensionsSettings";
 import SORALogoText from "@foxglove/studio-base/components/SORALogoText";
 import Stack from "@foxglove/studio-base/components/Stack";
 import {
@@ -176,6 +177,7 @@ const aboutItems = new Map<
 
 export type AppSettingsTab =
   | "general"
+  | "extensions"
   | "experimental-features"
   | "about";
 
@@ -227,6 +229,7 @@ export function AppSettingsDialog(
           onChange={handleTabChange}
         >
           <Tab className={classes.tab} label={t("general")} value="general" />
+          <Tab className={classes.tab} label={t("extensions")} value="extensions" />
           <Tab
             className={classes.tab}
             label={t("experimentalFeatures")}
@@ -248,6 +251,16 @@ export function AppSettingsDialog(
               <LanguageSettings />
               {supportsAppUpdates && <AutoUpdate />}
               {isDesktopApp() && <RosPackagePath />}
+            </Stack>
+          </section>
+
+          <section
+            className={cx(classes.tabPanel, {
+              [classes.tabPanelActive]: activeTab === "extensions",
+            })}
+          >
+            <Stack gap={2}>
+              <ExtensionsSettings />
             </Stack>
           </section>
 
